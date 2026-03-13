@@ -1,7 +1,10 @@
 import { PageTransition } from "../components/PageTransition";
+import { StaggerContainer, StaggerItem, MotionCard } from "../components/MotionCard";
+import { GradesSkeleton } from "../components/Skeleton";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, AlertCircle, ChevronDown, FileText, Table2, User, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { AlertCircle, ChevronDown, FileText, Table2, User, ChevronRight } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,11 +34,9 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlStr, 'text/html');
 
-  // The API returns TWO tables: gvNames (Subject/Division/Class/Teacher) and gvMarksheet (scores)
   const namesTable = doc.querySelector('#ctl01_gvNames') || doc.querySelector('.reportCommentNameGrid');
   const dataTable = doc.querySelector('#ctl01_gvMarksheet') || doc.querySelector('.reportCommentGrid');
 
-  // Fallback: single table mode
   if (!namesTable && !dataTable) {
     const tables = Array.from(doc.querySelectorAll('table'));
     const big = tables.sort((a, b) => b.querySelectorAll('tr').length - a.querySelectorAll('tr').length)[0];
@@ -43,18 +44,15 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
     return parseSingleTable(big);
   }
 
-  // Parse period label from data table subheader
   let periodLabel = '';
   const subHeader = dataTable?.querySelector('tr.subHeader th span');
   if (subHeader) {
     periodLabel = subHeader.textContent?.replace(/\s+/g, ' ').trim() || '';
   }
 
-  // Parse assessment column headers from data table
   const assessmentColumns: string[] = [];
   const dataRows = dataTable ? Array.from(dataTable.querySelectorAll('tr')) : [];
-  
-  // Find the column header row (the one after subHeader, with <th> containing column names)
+
   let colHeaderRow: Element | null = null;
   for (const tr of dataRows) {
     if (tr.classList.contains('subHeader')) continue;
@@ -74,12 +72,10 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
     }
   }
 
-  // Parse name rows
   const nameRows = namesTable ? Array.from(namesTable.querySelectorAll('tr')).filter(
     tr => !tr.querySelector('th') && !tr.classList.contains('marksheetFooter')
   ) : [];
 
-  // Parse data rows (skip header rows and footer)
   const scoreRows = dataRows.filter(
     tr => (tr.classList.contains('odd') || tr.classList.contains('even')) && !tr.classList.contains('marksheetFooter')
   );
@@ -88,17 +84,14 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
   const count = Math.max(nameRows.length, scoreRows.length);
 
   for (let i = 0; i < count; i++) {
-    // Extract name info
     let subject = '', clazz = '', teacher = '';
     if (nameRows[i]) {
       const tds = Array.from(nameRows[i].querySelectorAll('td'));
       subject = cleanCellText(tds[0]);
-      // tds[1] = division (skip), tds[2] = class, tds[3] = teacher
       clazz = cleanCellText(tds[2]);
       teacher = cleanCellText(tds[3]);
     }
 
-    // Extract score cells
     const scores: Record<string, ScoreCell | null> = {};
     if (scoreRows[i]) {
       const tds = Array.from(scoreRows[i].querySelectorAll('td'));
@@ -124,7 +117,6 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
     subjects.push({ subject, clazz, teacher, scores });
   }
 
-  // Parse footer averages
   const footerAverages: Record<string, string> = {};
   const footerRow = dataRows.find(tr => tr.classList.contains('marksheetFooter'));
   if (footerRow) {
@@ -143,7 +135,6 @@ function parseMarksheetHtml(htmlStr: string): ParsedMarksheet | null {
 
 function cleanCellText(el: Element | undefined): string {
   if (!el) return '';
-  // Get text but replace &nbsp; and clean up
   let text = el.innerHTML
     .replace(/&nbsp;/g, ' ')
     .replace(/<em>/g, '(')
@@ -153,14 +144,13 @@ function cleanCellText(el: Element | undefined): string {
   return tmp.textContent?.replace(/\s+/g, ' ').trim() || '';
 }
 
-// Fallback parser for non-standard response
 function parseSingleTable(table: Element): ParsedMarksheet | null {
   const rows = Array.from(table.querySelectorAll('tr'));
   if (rows.length < 2) return null;
 
   const headerCells = Array.from(rows[0].querySelectorAll('th, td'));
   const headers = headerCells.map(c => c.textContent?.replace(/\s+/g, ' ').trim() || '').filter(Boolean);
-  
+
   const subjects: SubjectRow[] = [];
   for (let i = 1; i < rows.length; i++) {
     const cells = Array.from(rows[i].querySelectorAll('td'));
@@ -175,26 +165,16 @@ function parseSingleTable(table: Element): ParsedMarksheet | null {
 
 // ─── Color Utilities ─────────────────────────────────────────────────────────
 
-// Map the school's color codes to our design palette
 function mapScoreColor(bgColor: string): { bg: string; text: string; ring: string } {
   const c = bgColor.toLowerCase();
-  // Green → excellent
   if (c === '#008c00') return { bg: 'bg-emerald-500', text: 'text-white', ring: '' };
-  // Blue → target / good
   if (c === '#0000ff' || c === '#2b5c9e') return { bg: 'bg-blue-500', text: 'text-white', ring: '' };
-  // Grey → neutral
   if (c === '#7c7c7c' || c === '#676767') return { bg: 'bg-zinc-500', text: 'text-white', ring: '' };
-  // Yellow → attention
   if (c === '#e4c801') return { bg: 'bg-amber-400', text: 'text-amber-950', ring: '' };
-  // Orange → warning
   if (c === '#d76b00') return { bg: 'bg-orange-500', text: 'text-white', ring: '' };
-  // Red → low
   if (c === '#9f4244') return { bg: 'bg-red-500', text: 'text-white', ring: '' };
-  // Light grey
   if (c === '#d3d3d3') return { bg: 'bg-zinc-200', text: 'text-zinc-700', ring: '' };
-  // Green highlight
   if (c === '#90ee90') return { bg: 'bg-emerald-200', text: 'text-emerald-800', ring: '' };
-  // Default
   return { bg: 'bg-zinc-100', text: 'text-zinc-700', ring: 'ring-1 ring-zinc-200' };
 }
 
@@ -241,7 +221,6 @@ export default function Grades() {
     return data.d ?? data;
   };
 
-  // 1. Init (runs once on mount)
   useEffect(() => {
     const ctrl = new AbortController();
     const { signal } = ctrl;
@@ -249,11 +228,7 @@ export default function Grades() {
     (async () => {
       try {
         setLoading(true);
-
-        const idRes = await fetch('/api/pupil-id', {
-          credentials: 'include',
-          signal,
-        });
+        const idRes = await fetch('/api/pupil-id', { credentials: 'include', signal });
         if (signal.aborted) return;
         if (idRes.status === 401) handle401('pupil-id');
         if (!idRes.ok) throw new Error('Failed to fetch Pupil ID');
@@ -275,10 +250,8 @@ export default function Grades() {
     return () => ctrl.abort();
   }, []);
 
-  // 2. Year → Periods
   useEffect(() => {
     if (!selectedYear) return;
-
     const ctrl = new AbortController();
     const { signal } = ctrl;
 
@@ -306,7 +279,6 @@ export default function Grades() {
     return () => ctrl.abort();
   }, [selectedYear]);
 
-  // 3. Period + showDetails → Marksheet
   useEffect(() => {
     if (!selectedYear || !selectedPeriod || !pupilId) return;
     if (!selectedPeriod.includes(selectedYear)) return;
@@ -409,88 +381,122 @@ export default function Grades() {
     return () => ctrl.abort();
   }, [selectedPeriod, selectedYear, pupilId, showDetails]);
 
-  // ─── Loading / Error ─────────────────────────────────────────────────────
   if (loading) {
     return (
       <PageTransition>
-        <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <Loader2 className="w-7 h-7 animate-spin mb-3" style={{ color: "var(--text-tertiary)" }} />
-          <p className="text-[14px] font-medium" style={{ color: "var(--text-secondary)" }}>加载成绩中…</p>
+        <div className="max-w-[1400px] mx-auto space-y-6 pb-16">
+          <div className="space-y-2">
+            <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+            <div className="h-4 w-48 rounded-lg animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+          </div>
+          <GradesSkeleton />
         </div>
       </PageTransition>
     );
   }
 
-  if (error) {
+  if (error && !marksheet) {
     return (
       <PageTransition>
-        <div className="p-4 rounded-2xl flex items-center gap-3 font-medium text-[14px] border" style={{ background: "rgba(255,59,48,0.08)", color: "var(--danger)", borderColor: "rgba(255,59,48,0.15)" }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+          className="p-4 rounded-2xl flex items-center gap-3 font-medium text-[14px] border"
+          style={{ background: "rgba(255,59,48,0.08)", color: "var(--danger)", borderColor: "rgba(255,59,48,0.15)" }}
+        >
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{error}</p>
-        </div>
+        </motion.div>
       </PageTransition>
     );
   }
 
   return (
     <PageTransition>
-      <div className="max-w-[1400px] mx-auto space-y-6 pb-16">
-
+      <StaggerContainer className="max-w-[1400px] mx-auto space-y-6 pb-16">
         {/* Header */}
-        <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[32px] leading-tight font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>成绩</h1>
-            <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>您的学术表现和评估。</p>
+        <StaggerItem>
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <h1 className="text-[32px] leading-tight font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>成绩</h1>
+              <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>您的学术表现和评估。</p>
+            </div>
+            <motion.button
+              onClick={() => setShowDetails(v => !v)}
+              disabled={loadingPeriods || loadingMarksheet}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed border"
+              style={{
+                background: showDetails ? "var(--accent)" : "var(--bg-primary)",
+                color: showDetails ? "#fff" : "var(--text-primary)",
+                borderColor: showDetails ? "var(--accent)" : "var(--border-strong)",
+              }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            >
+              <Table2 className="w-4 h-4" />
+              {showDetails ? '隐藏详细视图' : '显示详细评估'}
+            </motion.button>
           </div>
-          <button
-            onClick={() => setShowDetails(v => !v)}
-            disabled={loadingPeriods || loadingMarksheet}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed border"
-            style={{
-              background: showDetails ? "var(--accent)" : "var(--bg-primary)",
-              color: showDetails ? "#fff" : "var(--text-primary)",
-              borderColor: showDetails ? "var(--accent)" : "var(--border-strong)",
-            }}
-          >
-            <Table2 className="w-4 h-4" />
-            {showDetails ? '隐藏详细视图' : '显示详细评估'}
-          </button>
-        </div>
+        </StaggerItem>
 
         {/* Filters */}
-        <div className="p-1.5 rounded-2xl flex flex-col sm:flex-row gap-1.5" style={{ background: "var(--bg-secondary)" }}>
-          <FilterSelect
-            value={selectedYear}
-            onChange={setSelectedYear}
-            disabled={loadingPeriods || loadingMarksheet}
-            options={academicYears.map(y => ({ value: y.Value, label: y.Text }))}
-          />
-          <FilterSelect
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
-            disabled={loadingPeriods || loadingMarksheet}
-            options={loadingPeriods ? [{ value: '', label: 'Loading…' }] : reportingPeriods.map(p => ({ value: p.Value, label: p.Text }))}
-          />
-        </div>
+        <StaggerItem>
+          <div className="p-1.5 rounded-2xl flex flex-col sm:flex-row gap-1.5" style={{ background: "var(--bg-secondary)" }}>
+            <FilterSelect
+              value={selectedYear}
+              onChange={setSelectedYear}
+              disabled={loadingPeriods || loadingMarksheet}
+              options={academicYears.map(y => ({ value: y.Value, label: y.Text }))}
+            />
+            <FilterSelect
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+              disabled={loadingPeriods || loadingMarksheet}
+              options={loadingPeriods ? [{ value: '', label: 'Loading…' }] : reportingPeriods.map(p => ({ value: p.Value, label: p.Text }))}
+            />
+          </div>
+        </StaggerItem>
 
         {/* Content */}
-        {loadingMarksheet ? (
-          <div className="flex flex-col items-center justify-center py-32 rounded-3xl border" style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
-            <Loader2 className="w-7 h-7 animate-spin mb-3" style={{ color: "var(--text-tertiary)" }} />
-            <p className="text-[14px] font-medium" style={{ color: "var(--text-secondary)" }}>
-              {showDetails ? '获取详细评估中…' : '获取成绩中…'}
-            </p>
-          </div>
-        ) : marksheet && marksheet.subjects.length > 0 ? (
-          showDetails ? (
-            <DetailedView marksheet={marksheet} />
+        <AnimatePresence mode="wait">
+          {loadingMarksheet ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <GradesSkeleton />
+            </motion.div>
+          ) : marksheet && marksheet.subjects.length > 0 ? (
+            <motion.div
+              key={showDetails ? "detailed" : "card"}
+              initial={{ opacity: 0, y: 16, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
+            >
+              {showDetails ? (
+                <DetailedView marksheet={marksheet} />
+              ) : (
+                <CardView marksheet={marksheet} />
+              )}
+            </motion.div>
           ) : (
-            <CardView marksheet={marksheet} />
-          )
-        ) : (
-          <EmptyState />
-        )}
-      </div>
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+            >
+              <EmptyState />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </StaggerContainer>
     </PageTransition>
   );
 }
@@ -535,10 +541,9 @@ function EmptyState() {
   );
 }
 
-// ─── Card View (Normal Mode) ─────────────────────────────────────────────────
+// ─── Card View ───────────────────────────────────────────────────────────────
 
 function CardView({ marksheet }: { marksheet: ParsedMarksheet }) {
-  // For card mode, show key assessments: Target, Quarter Grade, Overall
   const keyColumns = marksheet.assessmentColumns.filter(c => {
     const l = c.toLowerCase();
     return l.includes('target') || l.includes('quarter grade') || l.includes('overall') || l.includes('seminar grade');
@@ -552,9 +557,12 @@ function CardView({ marksheet }: { marksheet: ParsedMarksheet }) {
         if (!sub.subject && !hasAnyScore) return null;
 
         return (
-          <div
+          <motion.div
             key={i}
-            className="rounded-2xl border px-5 py-4 transition-all duration-200"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.04, type: "spring", stiffness: 300, damping: 24 }}
+            className="rounded-2xl border px-5 py-4 transition-shadow duration-300"
             style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
             onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
             onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
@@ -579,16 +587,21 @@ function CardView({ marksheet }: { marksheet: ParsedMarksheet }) {
                   const colors = mapScoreColor(cell.bgColor);
                   return (
                     <div key={col} className="text-center min-w-0 max-w-[140px]">
-                      <div className={`inline-flex items-center justify-center min-w-[40px] h-[34px] px-2.5 rounded-lg text-[14px] font-bold tabular-nums ${colors.bg} ${colors.text} ${colors.ring}`}>
+                      <motion.div
+                        className={`inline-flex items-center justify-center min-w-[40px] h-[34px] px-2.5 rounded-lg text-[14px] font-bold tabular-nums ${colors.bg} ${colors.text} ${colors.ring}`}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.1 + i * 0.03, type: "spring", stiffness: 400, damping: 20 }}
+                      >
                         {cell.value}
-                      </div>
+                      </motion.div>
                       <p className="text-[10px] mt-1 leading-tight break-words whitespace-normal text-center" style={{ color: "var(--text-tertiary)" }}>{col}</p>
                     </div>
                   );
                 })}
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -624,9 +637,12 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
         const isExpanded = expandedIdx === i;
 
         return (
-          <div
+          <motion.div
             key={i}
-            className="rounded-2xl border overflow-hidden transition-all duration-200"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.04, type: "spring", stiffness: 300, damping: 24 }}
+            className="rounded-2xl border overflow-hidden transition-shadow duration-300"
             style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
             onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
             onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
@@ -637,10 +653,12 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
               onMouseEnter={e => (e.currentTarget.style.background = "var(--sidebar-hover)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <ChevronRight
-                className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
-                style={{ color: "var(--text-tertiary)" }}
-              />
+              <motion.div
+                animate={{ rotate: isExpanded ? 90 : 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 20 }}
+              >
+                <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "var(--text-tertiary)" }} />
+              </motion.div>
 
               <div className="min-w-0 flex-1">
                 <h3 className="text-[14px] font-semibold leading-snug truncate" style={{ color: "var(--text-primary)" }}>
@@ -675,39 +693,61 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
               )}
             </button>
 
-            {isExpanded && filledScores.length > 0 && (
-              <div className="px-5 pb-4 pt-0">
-                <div className="rounded-xl p-4" style={{ background: "var(--bg-secondary)" }}>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                    {filledScores.map(({ col, cell }) => {
-                      const colors = mapScoreColor(cell.bgColor);
-                      return (
-                        <div key={col} className="flex items-start gap-2.5 min-w-0">
-                          <span className={`flex-shrink-0 inline-flex items-center justify-center min-w-[40px] h-[34px] px-2.5 rounded-lg text-[14px] font-bold tabular-nums ${colors.bg} ${colors.text} ${colors.ring}`}>
-                            {cell.value}
-                          </span>
-                          <span className="text-[12px] leading-tight break-words whitespace-normal min-w-0 flex-1" style={{ color: "var(--text-secondary)" }}>
-                            {col}
-                          </span>
-                        </div>
-                      );
-                    })}
+            <AnimatePresence initial={false}>
+              {isExpanded && filledScores.length > 0 && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 28 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-5 pb-4 pt-0">
+                    <div className="rounded-xl p-4" style={{ background: "var(--bg-secondary)" }}>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                        {filledScores.map(({ col, cell }, j) => {
+                          const colors = mapScoreColor(cell.bgColor);
+                          return (
+                            <motion.div
+                              key={col}
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: j * 0.03, type: "spring", stiffness: 300, damping: 24 }}
+                              className="flex items-start gap-2.5 min-w-0"
+                            >
+                              <span className={`flex-shrink-0 inline-flex items-center justify-center min-w-[40px] h-[34px] px-2.5 rounded-lg text-[14px] font-bold tabular-nums ${colors.bg} ${colors.text} ${colors.ring}`}>
+                                {cell.value}
+                              </span>
+                              <span className="text-[12px] leading-tight break-words whitespace-normal min-w-0 flex-1" style={{ color: "var(--text-secondary)" }}>
+                                {col}
+                              </span>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {isExpanded && filledScores.length === 0 && (
               <div className="px-5 pb-4">
                 <p className="text-[12px] italic" style={{ color: "var(--text-tertiary)" }}>No scores available for this subject.</p>
               </div>
             )}
-          </div>
+          </motion.div>
         );
       })}
 
       {Object.keys(marksheet.footerAverages).length > 0 && (
-        <div className="rounded-2xl px-5 py-4" style={{ background: "var(--bg-secondary)" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 24 }}
+          className="rounded-2xl px-5 py-4"
+          style={{ background: "var(--bg-secondary)" }}
+        >
           <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--text-secondary)" }}>Averages</h4>
           <div className="flex flex-wrap gap-2">
             {Object.entries(marksheet.footerAverages).map(([col, val]) => (
@@ -717,7 +757,7 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
     </div>
   );

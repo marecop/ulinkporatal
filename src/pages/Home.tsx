@@ -1,8 +1,10 @@
 import { PageTransition } from "../components/PageTransition";
-import { Calendar, BookOpen, Clock, MapPin, ChevronRight, Loader2, User, Activity } from "lucide-react";
+import { StaggerContainer, StaggerItem } from "../components/MotionCard";
+import { Calendar, Clock, MapPin, ChevronRight, User, Activity } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
+import { CardSkeleton, ListSkeleton } from "../components/Skeleton";
 
 interface Lesson {
   day: string;
@@ -43,9 +45,7 @@ export default function Home() {
       try {
         const cached = sessionStorage.getItem("activitiesData");
         if (cached) { setActivities(JSON.parse(cached).slice(0, 5)); setIsLoadingActivities(false); return; }
-        const response = await fetch("/api/activities", {
-          credentials: "include"
-        });
+        const response = await fetch("/api/activities", { credentials: "include" });
         if (response.status === 401) { setActivitiesError("登录已过期"); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
@@ -66,9 +66,7 @@ export default function Home() {
           setTodayClasses((d.lessons || []).filter((l: Lesson) => l.day === days[new Date().getDay()]));
           setIsLoadingClasses(false); return;
         }
-        const response = await fetch("/api/timetable", {
-          credentials: "include"
-        });
+        const response = await fetch("/api/timetable", { credentials: "include" });
         if (response.status === 401) { setClassesError("登录已过期"); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
@@ -85,28 +83,20 @@ export default function Home() {
 
   return (
     <PageTransition>
-      <div className="space-y-8">
+      <StaggerContainer className="space-y-8">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
+        <StaggerItem>
           <h1 className="text-[32px] font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
             主页
           </h1>
           <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>
             欢迎回来，这是您今天的概览
           </p>
-        </motion.div>
+        </StaggerItem>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Today's Schedule */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
+          <StaggerItem>
             <div className="flex items-center justify-between mb-3 px-1">
               <h2 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
                 今日课程
@@ -120,12 +110,14 @@ export default function Home() {
               </Link>
             </div>
             <div
-              className="rounded-2xl border overflow-hidden min-h-[200px] relative"
+              className="rounded-2xl border overflow-hidden min-h-[200px] relative transition-shadow duration-300"
               style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
             >
               {isLoadingClasses ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-tertiary)" }} />
+                <div className="p-3">
+                  <ListSkeleton rows={4} />
                 </div>
               ) : classesError ? (
                 <div className="absolute inset-0 flex items-center justify-center text-[13px]" style={{ color: "var(--danger)" }}>
@@ -143,9 +135,9 @@ export default function Home() {
                     return (
                       <motion.div
                         key={i}
-                        initial={{ opacity: 0, x: -8 }}
+                        initial={{ opacity: 0, x: -12 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05, duration: 0.3 }}
+                        transition={{ delay: i * 0.06, type: "spring", stiffness: 300, damping: 24 }}
                         className="flex items-start gap-4 p-3 rounded-xl transition-colors duration-150"
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--sidebar-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -178,14 +170,10 @@ export default function Home() {
                 </div>
               )}
             </div>
-          </motion.section>
+          </StaggerItem>
 
           {/* Activities */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.4 }}
-          >
+          <StaggerItem>
             <div className="flex items-center justify-between mb-3 px-1">
               <h2 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
                 近期活动
@@ -199,12 +187,14 @@ export default function Home() {
               </Link>
             </div>
             <div
-              className="rounded-2xl border overflow-hidden min-h-[200px] relative"
+              className="rounded-2xl border overflow-hidden min-h-[200px] relative transition-shadow duration-300"
               style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
             >
               {isLoadingActivities ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--text-tertiary)" }} />
+                <div className="p-3">
+                  <ListSkeleton rows={4} />
                 </div>
               ) : activitiesError ? (
                 <div className="absolute inset-0 flex items-center justify-center text-[13px]" style={{ color: "var(--danger)" }}>
@@ -224,9 +214,9 @@ export default function Home() {
                     return (
                       <motion.div
                         key={act.ID || act.ActivityID || i}
-                        initial={{ opacity: 0, x: -8 }}
+                        initial={{ opacity: 0, x: -12 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05, duration: 0.3 }}
+                        transition={{ delay: i * 0.06, type: "spring", stiffness: 300, damping: 24 }}
                         className="flex items-center justify-between px-5 py-4 transition-colors duration-150"
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--sidebar-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -247,9 +237,9 @@ export default function Home() {
                 </div>
               )}
             </div>
-          </motion.section>
+          </StaggerItem>
         </div>
-      </div>
+      </StaggerContainer>
     </PageTransition>
   );
 }

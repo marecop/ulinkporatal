@@ -1,7 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import Sidebar from "./Sidebar";
 
 export default function Layout() {
@@ -11,10 +10,7 @@ export default function Layout() {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch("/api/me", {
-      credentials: "include",
-      signal: ctrl.signal
-    })
+    fetch("/api/me", { credentials: "include", signal: ctrl.signal })
       .then((res) => {
         if (ctrl.signal.aborted) return;
         if (!res.ok) {
@@ -36,18 +32,51 @@ export default function Layout() {
 
   if (checking) {
     return (
-      <div className="flex h-screen w-full items-center justify-center transition-colors duration-300" style={{ background: "var(--bg-secondary)" }}>
-        <Loader2 className="w-7 h-7 animate-spin" style={{ color: "var(--text-tertiary)" }} />
+      <div className="flex h-screen w-full items-center justify-center" style={{ background: "var(--bg-secondary)" }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          <motion.div
+            className="w-8 h-8 rounded-full border-2"
+            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--accent)" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+          />
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden transition-colors duration-300" style={{ background: "var(--bg-secondary)" }}>
+    <div className="noise-overlay flex h-screen w-full overflow-hidden relative" style={{ background: "var(--bg-secondary)" }}>
+      {/* Ambient glow orbs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute w-[500px] h-[500px] rounded-full"
+          style={{
+            background: "radial-gradient(circle, rgba(var(--glow-rgb),0.04), transparent 70%)",
+            top: "-10%", right: "5%",
+            filter: "blur(40px)",
+            animation: "float-orb 25s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="absolute w-[400px] h-[400px] rounded-full"
+          style={{
+            background: "radial-gradient(circle, rgba(var(--glow-rgb),0.03), transparent 70%)",
+            bottom: "0%", left: "20%",
+            filter: "blur(50px)",
+            animation: "float-orb 20s ease-in-out infinite reverse",
+          }}
+        />
+      </div>
+
       <Sidebar />
-      <main className="flex-1 h-full overflow-y-auto relative">
+      <main className="flex-1 h-full overflow-y-auto relative z-10">
         <div className="max-w-5xl mx-auto p-8 md:p-12">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <div key={location.pathname}>
               <Outlet />
             </div>

@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from './context/ThemeContext';
+import { NavigationProvider } from './context/NavigationContext';
 import App from './App.tsx';
 import './index.css';
 
@@ -10,6 +11,8 @@ window.addEventListener('beforeunload', () => {
 
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider>
-    <App />
+    <NavigationProvider>
+      <App />
+    </NavigationProvider>
   </ThemeProvider>,
 );

@@ -7,6 +7,7 @@ import Grades from "./pages/Grades";
 import Schedule from "./pages/Schedule";
 import Websites from "./pages/Websites";
 import Activities from "./pages/Activities";
+import Settings from "./pages/Settings";
 import GenericPage from "./pages/GenericPage";
 import { Target, FileText, Info, MessageSquare, ShieldAlert, Book } from "lucide-react";
 
@@ -23,8 +24,8 @@ export default function App() {
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/websites" element={<Websites />} />
           <Route path="/activities" element={<Activities />} />
+          <Route path="/settings" element={<Settings />} />
           
-          {/* Generic Pages for the rest */}
           <Route path="/scores" element={<GenericPage title="分数" description="查看您的各项作业和考试分数" icon={Target} />} />
           <Route path="/reports" element={<GenericPage title="成绩报告" description="查看和下载您的官方成绩单" icon={FileText} />} />
           <Route path="/extra" element={<GenericPage title="额外信息" description="其他相关的学生信息" icon={Info} />} />

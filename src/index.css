@@ -8,6 +8,7 @@
   --color-apple-text: #1d1d1f;
   --color-apple-bg: #f5f5f7;
 }
+
 :root {
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f7;
@@ -23,7 +24,7 @@
   --accent-soft: rgba(0, 113, 227, 0.08);
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.08);
-  --sidebar-bg: #f5f5f7;
+  --sidebar-bg: rgba(245, 245, 247, 0.8);
   --sidebar-hover: rgba(0, 0, 0, 0.04);
   --sidebar-active: rgba(0, 0, 0, 0.06);
   --input-bg: #f5f5f7;
@@ -32,32 +33,70 @@
   --warning: #ff9500;
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+
+  /* Glow system */
+  --glow-rgb: 0, 113, 227;
+  --glow-soft: rgba(var(--glow-rgb), 0.06);
+  --glow-medium: rgba(var(--glow-rgb), 0.12);
+  --glow-strong: rgba(var(--glow-rgb), 0.22);
+  --glow-border: rgba(var(--glow-rgb), 0.18);
+  --glow-shadow: 0 0 20px rgba(var(--glow-rgb), 0.1), 0 0 60px rgba(var(--glow-rgb), 0.04);
+  --glow-shadow-hover: 0 0 30px rgba(var(--glow-rgb), 0.18), 0 0 80px rgba(var(--glow-rgb), 0.06);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-blur: 16px;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, var(--accent), #8b5cf6);
+  --gradient-warm: linear-gradient(135deg, #ec4899, #f59e0b);
+  --gradient-cool: linear-gradient(135deg, #06b6d4, #8b5cf6);
 }
 
 .dark {
-  --bg-primary: #1c1c1e;
-  --bg-secondary: #2c2c2e;
-  --bg-tertiary: #3a3a3c;
-  --bg-elevated: #2c2c2e;
-  --text-primary: #f5f5f7;
-  --text-secondary: #98989d;
-  --text-tertiary: #636366;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
+  --bg-primary: #0a0a0c;
+  --bg-secondary: #111114;
+  --bg-tertiary: #1a1a1f;
+  --bg-elevated: #16161a;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8b8b95;
+  --text-tertiary: #55555e;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
   --accent: #0a84ff;
   --accent-hover: #409cff;
-  --accent-soft: rgba(10, 132, 255, 0.12);
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.4);
-  --sidebar-bg: #1c1c1e;
-  --sidebar-hover: rgba(255, 255, 255, 0.05);
-  --sidebar-active: rgba(255, 255, 255, 0.08);
-  --input-bg: #3a3a3c;
+  --accent-soft: rgba(10, 132, 255, 0.10);
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --card-shadow-hover: 0 8px 40px rgba(0, 0, 0, 0.5);
+  --sidebar-bg: rgba(10, 10, 12, 0.85);
+  --sidebar-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-active: rgba(255, 255, 255, 0.06);
+  --input-bg: #1a1a1f;
   --danger: #ff453a;
   --success: #30d158;
   --warning: #ff9f0a;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+
+  /* Glow (darker = more visible glow) */
+  --glow-rgb: 10, 132, 255;
+  --glow-soft: rgba(var(--glow-rgb), 0.08);
+  --glow-medium: rgba(var(--glow-rgb), 0.15);
+  --glow-strong: rgba(var(--glow-rgb), 0.28);
+  --glow-border: rgba(var(--glow-rgb), 0.22);
+  --glow-shadow: 0 0 25px rgba(var(--glow-rgb), 0.12), 0 0 80px rgba(var(--glow-rgb), 0.05);
+  --glow-shadow-hover: 0 0 40px rgba(var(--glow-rgb), 0.22), 0 0 100px rgba(var(--glow-rgb), 0.08);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(22, 22, 26, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-blur: 20px;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, var(--accent), #8b5cf6);
+  --gradient-warm: linear-gradient(135deg, #ec4899, #f59e0b);
+  --gradient-cool: linear-gradient(135deg, #06b6d4, #8b5cf6);
 }
 
 body {
@@ -66,7 +105,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.4s ease, color 0.4s ease;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -74,6 +113,78 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Noise texture overlay */
+.noise-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+.dark .noise-overlay::before {
+  opacity: 0.03;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+/* Glow card hover */
+.glow-card {
+  transition: box-shadow 0.4s ease, transform 0.3s ease;
+}
+.glow-card:hover {
+  box-shadow: var(--glow-shadow-hover);
+}
+
+/* Animated gradient border */
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.gradient-border {
+  --border-angle: 0deg;
+  border: 1px solid transparent;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  animation: rotate-border 4s linear infinite;
+}
+@keyframes rotate-border {
+  to { --border-angle: 360deg; }
+}
+
+/* Ambient orb animation */
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.05); }
+  50% { transform: translate(-15px, 15px) scale(0.95); }
+  75% { transform: translate(20px, 10px) scale(1.02); }
+}
+
+/* Pulse glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.08); }
+  50% { box-shadow: 0 0 40px rgba(var(--glow-rgb), 0.18); }
+}
+
+/* Shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Timetable styles */
 .timetable-wrapper { width: 100%; overflow-x: auto; }
 .timetable-content { width: 100%; min-width: 800px; }
 .timetable-content table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
