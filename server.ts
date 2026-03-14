@@ -5,21 +5,6 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import {
-  deleteMicrosoftBinding,
-  getMicrosoftBinding,
-  isDatabaseConfigured,
-  listExamRecords,
-  updateMicrosoftBindingSyncStatus,
-  upsertMicrosoftBinding,
-} from "./server/db.ts";
-import {
-  buildMicrosoftAuthorizeUrl,
-  exchangeAuthorizationCode,
-  fetchMicrosoftUser,
-  isMicrosoftConfigured,
-  refreshMicrosoftAccessToken,
-} from "./server/microsoft/oauth.ts";
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = "portal_session";
@@ -36,6 +21,14 @@ type SessionPayload = {
   pupilId?: string;
   exp: number;
 };
+
+function loadDatabaseModule() {
+  return import("./server/db.ts");
+}
+
+function loadMicrosoftOAuthModule() {
+  return import("./server/microsoft/oauth.ts");
+}
 
 function parseCookies(header?: string): Record<string, string> {
   if (!header) return {};
@@ -436,6 +429,8 @@ async function ensurePupilId(req: express.Request, res: express.Response) {
 }
 
 async function getMicrosoftAccessTokenForPupil(pupilId: string) {
+  const { getMicrosoftBinding, upsertMicrosoftBinding } = await loadDatabaseModule();
+  const { refreshMicrosoftAccessToken } = await loadMicrosoftOAuthModule();
   const binding = await getMicrosoftBinding(pupilId);
   if (!binding) {
     throw new Error("Microsoft account is not bound");
@@ -505,6 +500,8 @@ async function createApp() {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
+    const { isDatabaseConfigured, getMicrosoftBinding } = await loadDatabaseModule();
+    const { isMicrosoftConfigured } = await loadMicrosoftOAuthModule();
     const databaseConfigured = isDatabaseConfigured();
     const microsoftConfigured = isMicrosoftConfigured();
     const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
@@ -544,6 +541,9 @@ async function createApp() {
       return res.redirect(buildSettingsRedirect("portal-auth-required"));
     }
 
+    const { isDatabaseConfigured } = await loadDatabaseModule();
+    const { isMicrosoftConfigured, buildMicrosoftAuthorizeUrl } = await loadMicrosoftOAuthModule();
+
     if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
       return res.redirect(buildSettingsRedirect("config-error"));
     }
@@ -577,6 +577,9 @@ async function createApp() {
       clearOAuthState(res);
       return res.redirect(buildSettingsRedirect("portal-auth-required"));
     }
+
+    const { isDatabaseConfigured, upsertMicrosoftBinding } = await loadDatabaseModule();
+    const { isMicrosoftConfigured, exchangeAuthorizationCode, fetchMicrosoftUser } = await loadMicrosoftOAuthModule();
 
     if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
       clearOAuthState(res);
@@ -620,6 +623,7 @@ async function createApp() {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
+    const { isDatabaseConfigured, deleteMicrosoftBinding } = await loadDatabaseModule();
     if (!isDatabaseConfigured()) {
       return res.status(503).json({ error: "Database is not configured" });
     }
@@ -1184,6 +1188,9 @@ async function createApp() {
       return res.status(401).json({ error: "No authentication token provided" });
     }
 
+    const { isDatabaseConfigured, getMicrosoftBinding, updateMicrosoftBindingSyncStatus } = await loadDatabaseModule();
+    const { isMicrosoftConfigured } = await loadMicrosoftOAuthModule();
+
     if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
       return res.status(503).json({ error: "Microsoft exam sync is not configured" });
     }
@@ -1236,6 +1243,8 @@ async function createApp() {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
+    const { isDatabaseConfigured, getMicrosoftBinding, listExamRecords } = await loadDatabaseModule();
+    const { isMicrosoftConfigured } = await loadMicrosoftOAuthModule();
     const databaseConfigured = isDatabaseConfigured();
     const microsoftConfigured = isMicrosoftConfigured();
     const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
