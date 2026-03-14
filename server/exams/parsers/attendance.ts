@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-import { PDFParse } from "pdf-parse";
 import type { DownloadedGraphFile, ExamSession, ParsedAttendanceResult, ParsedStudentRow } from "../types.ts";
 import {
   cleanCells,
@@ -218,6 +216,7 @@ function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAtten
 }
 
 async function parseWorkbook(file: DownloadedGraphFile) {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(file.buffer, { type: "buffer" });
   const sessions: ExamSession[] = [];
   const warnings: string[] = [];
@@ -238,6 +237,7 @@ async function parseWorkbook(file: DownloadedGraphFile) {
 }
 
 async function parsePdf(file: DownloadedGraphFile) {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: file.buffer });
   try {
     const parsed = await parser.getText();

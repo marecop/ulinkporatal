@@ -13,7 +13,6 @@ import {
   updateMicrosoftBindingSyncStatus,
   upsertMicrosoftBinding,
 } from "./server/db.ts";
-import { syncExamData } from "./server/exams/sync.ts";
 import {
   buildMicrosoftAuthorizeUrl,
   exchangeAuthorizationCode,
@@ -1208,6 +1207,7 @@ async function createApp() {
       }
 
       const accessToken = await getMicrosoftAccessTokenForPupil(pupilId);
+      const { syncExamData } = await import("./server/exams/sync.ts");
       const syncResult = await syncExamData({
         pupilId,
         middleName: studentDetails.middleName,
