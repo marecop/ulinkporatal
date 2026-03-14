@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import axios from "axios";
 import { clearExamData, getExamScheduleState, replaceExamData, upsertExamScheduleState, type ExamSourceFileInsert } from "../db.js";
 import { applyFullCentreSupervision, buildMatchedExamRecords, buildMatchedSupervisionRecords } from "./matcher.js";
 import { parseAttendanceFile } from "./parsers/attendance.js";
@@ -13,14 +14,17 @@ import type {
 } from "./types.js";
 
 const TEMPORARY_ATTENDANCE_ASSET_RELATIVE_PATH = path.join("public", "exam-fallback", "attendance-sheet-until-20260324.xlsx");
+const TEMPORARY_ATTENDANCE_ASSET_PUBLIC_PATH = "/exam-fallback/attendance-sheet-until-20260324.xlsx";
 const TEMPORARY_ATTENDANCE_SOURCE_ID = "temporary-attendance-sheet-20260324";
 const TEMPORARY_ATTENDANCE_SOURCE_NAME = "attendance-sheet-until-20260324.xlsx";
 const TEMPORARY_SUPERVISION_ASSET_RELATIVE_PATH = path.join("public", "exam-fallback", "full-centre-supervision-arrangement-20260324.xlsx");
+const TEMPORARY_SUPERVISION_ASSET_PUBLIC_PATH = "/exam-fallback/full-centre-supervision-arrangement-20260324.xlsx";
 const TEMPORARY_SUPERVISION_SOURCE_ID = "temporary-full-centre-supervision-20260324";
 const TEMPORARY_SUPERVISION_SOURCE_NAME = "full-centre-supervision-arrangement-20260324.xlsx";
 const TEMPORARY_FALLBACK_CUTOFF_DATE = "2026-03-24";
 const TEMPORARY_FALLBACK_SOURCE_MODE = "local-static-mock";
 const EXCEL_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const TEMPORARY_FALLBACK_FETCH_TIMEOUT_MS = 15000;
 
 let parsedAttendancePromise: Promise<ParsedAttendanceResult> | null = null;
 let parsedSupervisionPromise: Promise<ParsedFullCentreSupervisionResult> | null = null;
@@ -49,13 +53,39 @@ function getAbsoluteAssetPath(relativePath: string) {
   return path.join(process.cwd(), relativePath);
 }
 
+async function fetchAssetBuffer(baseUrl: string, publicPath: string) {
+  const assetUrl = new URL(publicPath, baseUrl).toString();
+  const response = await axios.get<ArrayBuffer>(assetUrl, {
+    responseType: "arraybuffer",
+    timeout: TEMPORARY_FALLBACK_FETCH_TIMEOUT_MS,
+  });
+  return Buffer.from(response.data);
+}
+
 async function loadLocalExcelFile(params: {
   relativePath: string;
+  publicPath: string;
+  baseUrl?: string;
   sourceId: string;
   fileName: string;
   kind: DownloadedGraphFile["kind"];
 }) {
-  const buffer = await readFile(getAbsoluteAssetPath(params.relativePath));
+  let buffer: Buffer;
+
+  if (process.env.VERCEL && params.baseUrl) {
+    buffer = await fetchAssetBuffer(params.baseUrl, params.publicPath);
+  } else {
+    try {
+      buffer = await readFile(getAbsoluteAssetPath(params.relativePath));
+    } catch (error: any) {
+      if (error?.code === "ENOENT" && params.baseUrl) {
+        buffer = await fetchAssetBuffer(params.baseUrl, params.publicPath);
+      } else {
+        throw error;
+      }
+    }
+  }
+
   return {
     file: {
       id: params.sourceId,
@@ -76,11 +106,13 @@ async function loadLocalExcelFile(params: {
   };
 }
 
-async function loadParsedAttendance() {
+async function loadParsedAttendance(baseUrl?: string) {
   if (!parsedAttendancePromise) {
     parsedAttendancePromise = (async () => {
       const { file } = await loadLocalExcelFile({
         relativePath: TEMPORARY_ATTENDANCE_ASSET_RELATIVE_PATH,
+        publicPath: TEMPORARY_ATTENDANCE_ASSET_PUBLIC_PATH,
+        baseUrl,
         sourceId: TEMPORARY_ATTENDANCE_SOURCE_ID,
         fileName: TEMPORARY_ATTENDANCE_SOURCE_NAME,
         kind: "attendance",
@@ -95,11 +127,13 @@ async function loadParsedAttendance() {
   return parsedAttendancePromise;
 }
 
-async function loadParsedSupervision() {
+async function loadParsedSupervision(baseUrl?: string) {
   if (!parsedSupervisionPromise) {
     parsedSupervisionPromise = (async () => {
       const { file } = await loadLocalExcelFile({
         relativePath: TEMPORARY_SUPERVISION_ASSET_RELATIVE_PATH,
+        publicPath: TEMPORARY_SUPERVISION_ASSET_PUBLIC_PATH,
+        baseUrl,
         sourceId: TEMPORARY_SUPERVISION_SOURCE_ID,
         fileName: TEMPORARY_SUPERVISION_SOURCE_NAME,
         kind: "full-centre-supervision",
@@ -114,22 +148,26 @@ async function loadParsedSupervision() {
   return parsedSupervisionPromise;
 }
 
-async function loadParsedFallbackSources() {
+async function loadParsedFallbackSources(baseUrl?: string) {
   const [attendanceSource, supervisionSource, attendance, supervision] = await Promise.all([
     loadLocalExcelFile({
       relativePath: TEMPORARY_ATTENDANCE_ASSET_RELATIVE_PATH,
+      publicPath: TEMPORARY_ATTENDANCE_ASSET_PUBLIC_PATH,
+      baseUrl,
       sourceId: TEMPORARY_ATTENDANCE_SOURCE_ID,
       fileName: TEMPORARY_ATTENDANCE_SOURCE_NAME,
       kind: "attendance",
     }),
     loadLocalExcelFile({
       relativePath: TEMPORARY_SUPERVISION_ASSET_RELATIVE_PATH,
+      publicPath: TEMPORARY_SUPERVISION_ASSET_PUBLIC_PATH,
+      baseUrl,
       sourceId: TEMPORARY_SUPERVISION_SOURCE_ID,
       fileName: TEMPORARY_SUPERVISION_SOURCE_NAME,
       kind: "full-centre-supervision",
     }),
-    loadParsedAttendance(),
-    loadParsedSupervision(),
+    loadParsedAttendance(baseUrl),
+    loadParsedSupervision(baseUrl),
   ]);
 
   return {
@@ -178,7 +216,7 @@ export async function getTemporaryFallbackExamRecords(params: {
     };
   }
 
-  const parsed = await loadParsedFallbackSources();
+  const parsed = await loadParsedFallbackSources(params.baseUrl);
   const exams = mergeTemporaryExamRecords(params.middleName, parsed)
     .filter((record) => record.examDate >= today && record.examDate <= TEMPORARY_FALLBACK_CUTOFF_DATE);
 
@@ -192,6 +230,7 @@ export async function getTemporaryFallbackExamRecords(params: {
 }
 
 export async function ensureTemporaryFallbackExamData(params: {
+  baseUrl?: string;
   pupilId: string;
   middleName: string;
   today: string;
@@ -232,7 +271,7 @@ export async function ensureTemporaryFallbackExamData(params: {
     };
   }
 
-  const parsed = await loadParsedFallbackSources();
+  const parsed = await loadParsedFallbackSources(params.baseUrl);
   const exams = mergeTemporaryExamRecords(params.middleName, parsed)
     .filter((record) => record.examDate >= today && record.examDate <= TEMPORARY_FALLBACK_CUTOFF_DATE);
   const warnings = [...parsed.attendance.warnings, ...parsed.supervision.warnings];

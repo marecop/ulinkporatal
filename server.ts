@@ -140,6 +140,18 @@ function getAuthCookies(req: express.Request): string | null {
   return readSession(req)?.authCookies ?? null;
 }
 
+function getRequestOrigin(req: express.Request) {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : (forwardedProto?.split(",")[0] || req.protocol || (isProd ? "https" : "http"));
+  const host = req.get("host");
+  if (!host) {
+    throw new Error("Host header is missing");
+  }
+  return `${protocol}://${host}`;
+}
+
 function updateSession(res: express.Response, req: express.Request, patch: Partial<SessionPayload>) {
   const existing = readSession(req);
   if (!existing) return;
@@ -767,6 +779,7 @@ async function createApp() {
         if (isDatabaseConfigured() && pupilId && studentDetails?.middleName) {
           try {
             await ensureTemporaryFallbackExamData({
+              baseUrl: getRequestOrigin(req),
               pupilId,
               middleName: studentDetails.middleName,
               today: refreshToday,
@@ -1341,6 +1354,7 @@ async function createApp() {
 
         if (databaseConfigured && pupilId && studentDetails.middleName) {
           await ensureTemporaryFallbackExamData({
+            baseUrl: getRequestOrigin(req),
             pupilId,
             middleName: studentDetails.middleName,
             today,
@@ -1368,6 +1382,7 @@ async function createApp() {
 
         if (studentDetails.middleName) {
           const fallback = await getTemporaryFallbackExamRecords({
+            baseUrl: getRequestOrigin(req),
             middleName: studentDetails.middleName,
             today,
           });
