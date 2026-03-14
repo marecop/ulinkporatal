@@ -34,6 +34,8 @@ export default function Sidebar() {
     } catch { /* ignore */ }
     sessionStorage.removeItem("activitiesData");
     sessionStorage.removeItem("timetableData");
+    sessionStorage.removeItem("examsData");
+    sessionStorage.removeItem("examsAutoSyncAt");
     localStorage.removeItem("authToken");
     navigate("/");
   };

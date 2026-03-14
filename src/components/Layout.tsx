@@ -16,6 +16,8 @@ export default function Layout() {
         if (!res.ok) {
           sessionStorage.removeItem("activitiesData");
           sessionStorage.removeItem("timetableData");
+          sessionStorage.removeItem("examsData");
+          sessionStorage.removeItem("examsAutoSyncAt");
           localStorage.removeItem("authToken");
           navigate("/", { replace: true });
         }

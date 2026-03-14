@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
 import { ScheduleSkeleton } from "../components/Skeleton";
-import { MapPin, User, BookOpen } from "lucide-react";
+import { MapPin, User, BookOpen, FileText } from "lucide-react";
+import { useExams } from "../hooks/useExams";
+import { buildDayTimeline } from "../lib/exam";
 
 interface Lesson {
   day: string;
@@ -38,6 +40,7 @@ export default function Schedule() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const todayIndex = new Date().getDay() - 1;
   const [selectedDay, setSelectedDay] = useState(todayIndex >= 0 && todayIndex < 5 ? days[todayIndex] : 'Monday');
+  const { data: examsData, loading: examsLoading, error: examsError } = useExams({ autoSync: true });
 
   useEffect(() => {
     const fetchTimetable = async () => {
@@ -56,8 +59,10 @@ export default function Schedule() {
     fetchTimetable();
   }, []);
 
-  const dayLessons = lessons.filter(l => l.day === selectedDay);
+  const dayTimeline = buildDayTimeline(lessons, examsData?.exams ?? [], selectedDay);
   const dayMap: Record<string, string> = { Monday: '周一', Tuesday: '周二', Wednesday: '周三', Thursday: '周四', Friday: '周五' };
+  const isLoadingTimeline = isLoading || (examsLoading && !examsData);
+  const timelineError = error || (!dayTimeline.length ? examsError ?? "" : "");
 
   return (
     <PageTransition>
@@ -94,11 +99,11 @@ export default function Schedule() {
         </StaggerItem>
 
         <div className="min-h-[400px] relative">
-          {isLoading ? (
+          {isLoadingTimeline ? (
             <ScheduleSkeleton />
-          ) : error ? (
-            <div className="absolute inset-0 flex items-center justify-center text-[14px]" style={{ color: "var(--danger)" }}>{error}</div>
-          ) : dayLessons.length === 0 ? (
+          ) : timelineError ? (
+            <div className="absolute inset-0 flex items-center justify-center text-[14px]" style={{ color: "var(--danger)" }}>{timelineError}</div>
+          ) : dayTimeline.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -106,7 +111,7 @@ export default function Schedule() {
               style={{ color: "var(--text-tertiary)" }}
             >
               <BookOpen className="w-12 h-12 mb-4 opacity-30" />
-              <p className="text-[14px]">今天没有课程安排</p>
+              <p className="text-[14px]">所选日期没有课程或考试安排</p>
             </motion.div>
           ) : (
             <AnimatePresence mode="wait">
@@ -118,8 +123,8 @@ export default function Schedule() {
                 transition={{ type: "spring", stiffness: 300, damping: 28 }}
                 className="space-y-3"
               >
-                {dayLessons.map((lesson, i) => {
-                  const c = getSubjectColor(lesson.subject);
+                {dayTimeline.map((item, i) => {
+                  const c = getSubjectColor(item.subject);
                   return (
                     <motion.div
                       key={i}
@@ -132,8 +137,8 @@ export default function Schedule() {
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
                     >
                       <div className="flex flex-row sm:flex-col items-center sm:items-end sm:w-20 shrink-0 gap-2 sm:gap-0">
-                        <span className="text-[18px] font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>{lesson.startTime}</span>
-                        <span className="text-[13px] font-medium tabular-nums" style={{ color: "var(--text-tertiary)" }}>{lesson.endTime}</span>
+                        <span className="text-[18px] font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>{item.startTime}</span>
+                        <span className="text-[13px] font-medium tabular-nums" style={{ color: "var(--text-tertiary)" }}>{item.endTime}</span>
                       </div>
 
                       <div className="hidden sm:block w-[3px] h-12 rounded-full" style={{ background: c.text, opacity: 0.3 }} />
@@ -144,17 +149,23 @@ export default function Schedule() {
                             className="inline-flex items-center px-2.5 py-1 rounded-lg text-[12px] font-bold"
                             style={{ background: c.bg, color: c.text }}
                           >
-                            {lesson.subject}
+                            {item.subject}
                           </span>
-                          {lesson.period && (
+                          {item.kind === "lesson" && item.period && (
                             <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: "var(--bg-secondary)", color: "var(--text-tertiary)" }}>
-                              {lesson.period}
+                              {item.period}
+                            </span>
+                          )}
+                          {item.kind === "exam" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: "rgba(255,149,0,0.12)", color: "#ff9500" }}>
+                              <FileText className="w-3 h-3" />
+                              考试
                             </span>
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                          {lesson.room && <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{lesson.room}</span>}
-                          {lesson.teacher && <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" />{lesson.teacher}</span>}
+                          {item.room && <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{item.room}</span>}
+                          {item.kind === "lesson" && item.teacher && <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" />{item.teacher}</span>}
                         </div>
                       </div>
                     </motion.div>

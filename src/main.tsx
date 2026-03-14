@@ -7,6 +7,8 @@ import './index.css';
 window.addEventListener('beforeunload', () => {
   sessionStorage.removeItem('activitiesData');
   sessionStorage.removeItem('timetableData');
+  sessionStorage.removeItem('examsData');
+  sessionStorage.removeItem('examsAutoSyncAt');
 });
 
 createRoot(document.getElementById('root')!).render(

@@ -5,10 +5,28 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import {
+  deleteMicrosoftBinding,
+  getMicrosoftBinding,
+  isDatabaseConfigured,
+  listExamRecords,
+  updateMicrosoftBindingSyncStatus,
+  upsertMicrosoftBinding,
+} from "./server/db.ts";
+import { syncExamData } from "./server/exams/sync.ts";
+import {
+  buildMicrosoftAuthorizeUrl,
+  exchangeAuthorizationCode,
+  fetchMicrosoftUser,
+  isMicrosoftConfigured,
+  refreshMicrosoftAccessToken,
+} from "./server/microsoft/oauth.ts";
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = "portal_session";
+const OAUTH_STATE_COOKIE_NAME = "microsoft_oauth_state";
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const SESSION_SECRET = process.env.SESSION_SECRET || "portal-session-secret-change-in-production";
 const isVercel = Boolean(process.env.VERCEL);
 const isProd = process.env.NODE_ENV === "production" || isVercel;
@@ -119,6 +137,339 @@ function updateSession(res: express.Response, req: express.Request, patch: Parti
   writeSession(res, { ...existing, ...patch });
 }
 
+function writeOAuthState(res: express.Response, state: string) {
+  const token = `${state}.${sign(state)}`;
+  appendSetCookie(
+    res,
+    `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(token)}; ${cookieAttributes(Math.floor(OAUTH_STATE_MAX_AGE_MS / 1000))}`,
+  );
+}
+
+function readOAuthState(req: express.Request) {
+  const token = parseCookies(req.headers.cookie)[OAUTH_STATE_COOKIE_NAME];
+  if (!token) return null;
+  const [state, signature] = token.split(".");
+  if (!state || !signature || sign(state) !== signature) return null;
+  return state;
+}
+
+function clearOAuthState(res: express.Response) {
+  appendSetCookie(
+    res,
+    `${OAUTH_STATE_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0; ${isProd ? "SameSite=None; Secure" : "SameSite=Lax"}`,
+  );
+}
+
+function getTokenEncryptionKey() {
+  const raw = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!raw) {
+    throw new Error("TOKEN_ENCRYPTION_KEY is not configured");
+  }
+  return crypto.createHash("sha256").update(raw).digest();
+}
+
+function encryptSecret(value: string) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getTokenEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, encrypted]).toString("base64url");
+}
+
+function decryptSecret(value: string) {
+  const payload = Buffer.from(value, "base64url");
+  const iv = payload.subarray(0, 12);
+  const authTag = payload.subarray(12, 28);
+  const encrypted = payload.subarray(28);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", getTokenEncryptionKey(), iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
+type PortalStudentDetails = Record<string, string> & {
+  middleName: string;
+  pupilId: string;
+};
+
+async function fetchPupilIdFromPortal(cookies: string) {
+  const response = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "Cookie": cookies,
+    },
+    validateStatus: function (status) {
+      return status >= 200 && status < 500;
+    },
+  });
+
+  if (response.status === 401 || response.status === 302) {
+    throw new Error("Unauthorized");
+  }
+
+  const html = response.data as string;
+  const patterns = [
+    /pupilIDs?:\s*["'](\d+)["']/i,
+    /Pupil[^=]*?=\s*["'](\d+)["']/i,
+    /value=["'](\d{3,5})["']/i,
+    /pupil.*?["'](\d+)["']/i,
+    /(\d{4})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  throw new Error("Could not find pupil ID in HTML");
+}
+
+async function fetchStudentDetailsFromPortal(cookies: string): Promise<PortalStudentDetails> {
+  const mainResponse = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "Cookie": cookies,
+    },
+    validateStatus: function (status) {
+      return status >= 200 && status < 500;
+    },
+  });
+
+  if (mainResponse.status === 401 || mainResponse.status === 302) {
+    throw new Error("Unauthorized");
+  }
+
+  const mainHtml = mainResponse.data as string;
+  const $main = cheerio.load(mainHtml);
+  const encryptedPupilId = $main('input[id$="hdnPupilID"]').val() as string;
+
+  if (!encryptedPupilId) {
+    throw new Error("Could not find encrypted pupil ID");
+  }
+
+  const detailsResponse = await axios.post("https://ulinkcollege.engagehosted.cn/Services/PupilDetailsServices.asmx/RenderSimpleSection", {
+    encryptedPupilID: encryptedPupilId,
+    sectionType: "PupilDetails",
+  }, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "Cookie": cookies,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+  });
+
+  const detailsHtml = detailsResponse.data.d as string;
+  const $ = cheerio.load(detailsHtml);
+
+  const fieldMap: Record<string, string> = {
+    "Surname": "surname",
+    "姓": "surname",
+    "Forename": "forename",
+    "名": "forename",
+    "First Name": "forename",
+    "Middle Name": "middleName",
+    "中间名": "middleName",
+    "Preferred Name": "preferredName",
+    "偏好姓名": "preferredName",
+    "Year Group": "yearGroup",
+    "Grade": "yearGroup",
+    "年级": "yearGroup",
+    "Homeroom": "homeroom",
+    "Form": "homeroom",
+    "Reg Group": "homeroom",
+    "Registration Group": "homeroom",
+    "班级教室": "homeroom",
+    "Age": "age",
+    "年龄": "age",
+    "Date of Birth": "dateOfBirth",
+    "DOB": "dateOfBirth",
+    "生日": "dateOfBirth",
+    "Tutor": "tutor",
+    "Form Tutor": "tutor",
+    "班主任": "tutor",
+    "Homeroom Teacher": "tutor",
+    "Gender": "gender",
+    "Sex": "gender",
+    "性别": "gender",
+    "Email": "email",
+    "Email Address": "email",
+    "E-mail": "email",
+    "邮箱": "email",
+    "Student ID": "studentId",
+    "Student Code": "studentId",
+    "学生学号": "studentId",
+    "Mobile": "mobile",
+  };
+
+  const result: PortalStudentDetails = {
+    surname: "",
+    forename: "",
+    middleName: "",
+    preferredName: "",
+    yearGroup: "",
+    homeroom: "",
+    age: "",
+    dateOfBirth: "",
+    tutor: "",
+    gender: "",
+    email: "",
+    studentId: "",
+    pupilId: "",
+    mobile: "",
+  };
+
+  $("th").each((_, el) => {
+    const labelText = $(el).text().trim().replace(/:$/, "").trim();
+    for (const [label, key] of Object.entries(fieldMap)) {
+      if (labelText.toLowerCase() === label.toLowerCase() && !result[key]) {
+        const nextTd = $(el).next("td");
+        if (nextTd.length) {
+          const val = nextTd.text().trim();
+          if (val) result[key] = val;
+        }
+      }
+    }
+  });
+
+  $("td").each((_, el) => {
+    const labelText = $(el).text().trim().replace(/:$/, "").trim();
+    for (const [label, key] of Object.entries(fieldMap)) {
+      if (labelText.toLowerCase() === label.toLowerCase() && !result[key]) {
+        const nextTd = $(el).next("td");
+        if (nextTd.length) {
+          const val = nextTd.text().trim();
+          if (val) result[key] = val;
+        }
+      }
+    }
+  });
+
+  $("span, label").each((_, el) => {
+    const labelText = $(el).text().trim().replace(/:$/, "").trim();
+    for (const [label, key] of Object.entries(fieldMap)) {
+      if (labelText.toLowerCase() === label.toLowerCase() && !result[key]) {
+        let val = $(el).next().text().trim();
+        if (!val) {
+          val = $(el).parent().next().text().trim();
+        }
+        if (!val) {
+          val = $(el).parent().find("input, select").val() as string || "";
+        }
+        if (val) result[key] = val;
+      }
+    }
+  });
+
+  const idPatterns: Record<string, RegExp> = {
+    surname: /surname/i,
+    forename: /forename|firstname/i,
+    middleName: /middle/i,
+    yearGroup: /yeargroup|year.*group|grade/i,
+    homeroom: /homeroom|form|reg.*group/i,
+    age: /\bage\b/i,
+    dateOfBirth: /dob|date.*birth|birthday/i,
+    tutor: /tutor/i,
+    gender: /gender|sex/i,
+    email: /email|e-?mail/i,
+  };
+
+  for (const [key, pattern] of Object.entries(idPatterns)) {
+    if (result[key]) continue;
+    $("span, input, select, label").each((_, el) => {
+      if (result[key]) return;
+      const id = $(el).attr("id") || "";
+      if (pattern.test(id)) {
+        const val = ($(el).val() as string) || $(el).text().trim();
+        if (val) result[key] = val;
+      }
+    });
+  }
+
+  const regexPatterns: [string, RegExp][] = [
+    ["surname", /Surname[^<]*<[^>]*>([^<]+)/i],
+    ["forename", /Forename[^<]*<[^>]*>([^<]+)/i],
+    ["middleName", /Middle\s*Name[^<]*<[^>]*>([^<]+)/i],
+    ["yearGroup", /Year\s*Group[^<]*<[^>]*>([^<]+)/i],
+    ["homeroom", /(?:Homeroom|Form|Reg(?:istration)?\s*Group)[^<]*<[^>]*>([^<]+)/i],
+    ["age", /\bAge\b[^<]*<[^>]*>([^<]+)/i],
+    ["dateOfBirth", /Date\s*of\s*Birth[^<]*<[^>]*>([^<]+)/i],
+    ["tutor", /(?:Form\s*)?Tutor[^<]*<[^>]*>([^<]+)/i],
+    ["gender", /Gender[^<]*<[^>]*>([^<]+)/i],
+    ["email", /E-?mail[^<]*<[^>]*>([^<]+)/i],
+  ];
+
+  for (const [key, pattern] of regexPatterns) {
+    if (result[key]) continue;
+    const match = detailsHtml.match(pattern);
+    if (match?.[1]) {
+      result[key] = match[1].trim();
+    }
+  }
+
+  const pupilIdPatterns = [
+    /pupilIDs?:\s*["'](\d+)["']/i,
+    /Pupil[^=]*?=\s*["'](\d+)["']/i,
+    /value=["'](\d{3,5})["']/i,
+    /pupil.*?["'](\d+)["']/i,
+    /(\d{4})/,
+  ];
+
+  for (const pattern of pupilIdPatterns) {
+    if (result.pupilId) break;
+    const match = mainHtml.match(pattern);
+    if (match?.[1]) {
+      result.pupilId = match[1];
+    }
+  }
+
+  return result;
+}
+
+async function ensurePupilId(req: express.Request, res: express.Response) {
+  const existing = readSession(req)?.pupilId;
+  if (existing) return existing;
+  const cookies = getAuthCookies(req);
+  if (!cookies) throw new Error("No authentication token provided");
+  const pupilId = await fetchPupilIdFromPortal(cookies);
+  updateSession(res, req, { pupilId });
+  return pupilId;
+}
+
+async function getMicrosoftAccessTokenForPupil(pupilId: string) {
+  const binding = await getMicrosoftBinding(pupilId);
+  if (!binding) {
+    throw new Error("Microsoft account is not bound");
+  }
+
+  let accessToken = decryptSecret(binding.accessTokenEncrypted);
+  let refreshToken = decryptSecret(binding.refreshTokenEncrypted);
+  const expiresAt = new Date(binding.tokenExpiresAt).getTime();
+
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now() + 5 * 60 * 1000) {
+    const refreshed = await refreshMicrosoftAccessToken(refreshToken);
+    accessToken = refreshed.accessToken;
+    refreshToken = refreshed.refreshToken || refreshToken;
+    await upsertMicrosoftBinding({
+      pupilId,
+      microsoftEmail: binding.microsoftEmail,
+      microsoftUserId: binding.microsoftUserId,
+      accessTokenEncrypted: encryptSecret(accessToken),
+      refreshTokenEncrypted: encryptSecret(refreshToken),
+      tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000).toISOString(),
+      scope: refreshed.scope || binding.scope,
+    });
+  }
+
+  return accessToken;
+}
+
+function buildSettingsRedirect(status: string, reason?: string) {
+  const params = new URLSearchParams({ ms: status });
+  if (reason) params.set("reason", reason);
+  return `/settings?${params.toString()}`;
+}
+
 async function createApp() {
   const app = express();
   app.set("trust proxy", true);
@@ -148,6 +499,139 @@ async function createApp() {
       return res.json({ authenticated: true });
     }
     return res.status(401).json({ authenticated: false });
+  });
+
+  app.get("/api/microsoft/status", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const databaseConfigured = isDatabaseConfigured();
+    const microsoftConfigured = isMicrosoftConfigured();
+    const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
+
+    if (!databaseConfigured || !microsoftConfigured || !tokenEncryptionConfigured) {
+      return res.json({
+        configured: false,
+        databaseConfigured,
+        microsoftConfigured,
+        tokenEncryptionConfigured,
+        bound: false,
+      });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      const binding = await getMicrosoftBinding(pupilId);
+      return res.json({
+        configured: true,
+        databaseConfigured,
+        microsoftConfigured,
+        tokenEncryptionConfigured,
+        bound: Boolean(binding),
+        pupilId,
+        email: binding?.microsoftEmail ?? null,
+        lastSyncAt: binding?.lastSyncAt ?? null,
+        lastSyncStatus: binding?.lastSyncStatus ?? null,
+        lastSyncMessage: binding?.lastSyncMessage ?? null,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to load Microsoft binding status" });
+    }
+  });
+
+  app.get("/api/microsoft/connect", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.redirect(buildSettingsRedirect("portal-auth-required"));
+    }
+
+    if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
+      return res.redirect(buildSettingsRedirect("config-error"));
+    }
+
+    try {
+      await ensurePupilId(req, res);
+      const state = crypto.randomBytes(24).toString("base64url");
+      writeOAuthState(res, state);
+      return res.redirect(buildMicrosoftAuthorizeUrl(state));
+    } catch (error: any) {
+      return res.redirect(buildSettingsRedirect("connect-error", error.message || "unable-to-start-oauth"));
+    }
+  });
+
+  app.get("/api/microsoft/callback", async (req, res) => {
+    const state = String(req.query.state ?? "");
+    const code = String(req.query.code ?? "");
+    const errorCode = String(req.query.error ?? "");
+
+    if (errorCode) {
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("oauth-error", errorCode));
+    }
+
+    if (!state || !code || state !== readOAuthState(req)) {
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("state-error"));
+    }
+
+    if (!readSession(req)?.authCookies) {
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("portal-auth-required"));
+    }
+
+    if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("config-error"));
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      const tokenResponse = await exchangeAuthorizationCode(code);
+      if (!tokenResponse.refreshToken) {
+        throw new Error("Microsoft did not return a refresh token");
+      }
+      const graphUser = await fetchMicrosoftUser(tokenResponse.accessToken);
+      const microsoftEmail = graphUser.mail || graphUser.userPrincipalName;
+
+      if (!microsoftEmail) {
+        throw new Error("Unable to resolve Microsoft account email");
+      }
+
+      await upsertMicrosoftBinding({
+        pupilId,
+        microsoftEmail,
+        microsoftUserId: graphUser.id,
+        accessTokenEncrypted: encryptSecret(tokenResponse.accessToken),
+        refreshTokenEncrypted: encryptSecret(tokenResponse.refreshToken),
+        tokenExpiresAt: new Date(Date.now() + tokenResponse.expiresIn * 1000).toISOString(),
+        scope: tokenResponse.scope,
+      });
+
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("connected"));
+    } catch (error: any) {
+      console.error("Microsoft callback error:", error.message);
+      clearOAuthState(res);
+      return res.redirect(buildSettingsRedirect("callback-error", error.message || "microsoft-callback-failed"));
+    }
+  });
+
+  app.post("/api/microsoft/unbind", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    if (!isDatabaseConfigured()) {
+      return res.status(503).json({ error: "Database is not configured" });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      await deleteMicrosoftBinding(pupilId);
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to unbind Microsoft account" });
+    }
   });
 
   app.post("/api/login", async (req, res) => {
@@ -261,6 +745,7 @@ async function createApp() {
     }
 
     clearSession(res);
+    clearOAuthState(res);
     res.json({ success: true, message: "Logged out successfully" });
   });
 
@@ -690,6 +1175,100 @@ async function createApp() {
     } catch (error: any) {
       console.error("Pupil ID error:", error.message);
       return res.status(500).json({ error: "An error occurred while fetching pupil ID" });
+    }
+  });
+
+  app.post("/api/exams/sync", async (req, res) => {
+    const cookies = getAuthCookies(req);
+
+    if (!cookies) {
+      return res.status(401).json({ error: "No authentication token provided" });
+    }
+
+    if (!isDatabaseConfigured() || !isMicrosoftConfigured() || !process.env.TOKEN_ENCRYPTION_KEY) {
+      return res.status(503).json({ error: "Microsoft exam sync is not configured" });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      const binding = await getMicrosoftBinding(pupilId);
+
+      if (!binding) {
+        return res.status(409).json({ error: "Microsoft account is not bound" });
+      }
+
+      const studentDetails = await fetchStudentDetailsFromPortal(cookies);
+      if (studentDetails.pupilId) {
+        updateSession(res, req, { pupilId: studentDetails.pupilId });
+      }
+
+      if (!studentDetails.middleName) {
+        await updateMicrosoftBindingSyncStatus(pupilId, "error", "当前学生没有 middleName，无法匹配考试名单");
+        return res.status(400).json({ error: "Current student does not have middleName for exam matching" });
+      }
+
+      const accessToken = await getMicrosoftAccessTokenForPupil(pupilId);
+      const syncResult = await syncExamData({
+        pupilId,
+        middleName: studentDetails.middleName,
+        accessToken,
+      });
+
+      return res.json({
+        success: true,
+        ...syncResult,
+      });
+    } catch (error: any) {
+      try {
+        const pupilId = await ensurePupilId(req, res);
+        await updateMicrosoftBindingSyncStatus(pupilId, "error", error.message || "Microsoft exam sync failed");
+      } catch {
+        // ignore follow-up status update failures
+      }
+
+      console.error("Exam sync error:", error.message);
+      return res.status(500).json({ error: error.message || "An error occurred while syncing exams" });
+    }
+  });
+
+  app.get("/api/exams", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const databaseConfigured = isDatabaseConfigured();
+    const microsoftConfigured = isMicrosoftConfigured();
+    const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
+
+    if (!databaseConfigured || !microsoftConfigured || !tokenEncryptionConfigured) {
+      return res.json({
+        configured: false,
+        bound: false,
+        exams: [],
+        databaseConfigured,
+        microsoftConfigured,
+        tokenEncryptionConfigured,
+      });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      const binding = await getMicrosoftBinding(pupilId);
+      const from = typeof req.query.from === "string" ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" ? req.query.to : undefined;
+      const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+
+      return res.json({
+        configured: true,
+        bound: Boolean(binding),
+        email: binding?.microsoftEmail ?? null,
+        lastSyncAt: binding?.lastSyncAt ?? null,
+        lastSyncStatus: binding?.lastSyncStatus ?? null,
+        lastSyncMessage: binding?.lastSyncMessage ?? null,
+        exams,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to load exams" });
     }
   });
 

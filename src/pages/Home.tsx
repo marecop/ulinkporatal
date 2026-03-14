@@ -1,10 +1,12 @@
 import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
-import { Calendar, Clock, MapPin, ChevronRight, User, Activity } from "lucide-react";
+import { Calendar, Clock, MapPin, ChevronRight, User, Activity, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { CardSkeleton, ListSkeleton } from "../components/Skeleton";
+import { ListSkeleton } from "../components/Skeleton";
+import { useExams } from "../hooks/useExams";
+import { buildTodayTimeline } from "../lib/exam";
 
 interface Lesson {
   day: string;
@@ -39,6 +41,7 @@ export default function Home() {
   const [todayClasses, setTodayClasses] = useState<Lesson[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [classesError, setClassesError] = useState("");
+  const { data: examsData, loading: examsLoading, error: examsError } = useExams({ autoSync: true });
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -81,6 +84,10 @@ export default function Home() {
     fetchTimetable();
   }, []);
 
+  const todayTimeline = buildTodayTimeline(todayClasses, examsData?.exams ?? []);
+  const isLoadingSchedule = isLoadingClasses || (examsLoading && !examsData);
+  const scheduleError = classesError || (!todayTimeline.length ? examsError ?? "" : "");
+
   return (
     <PageTransition>
       <StaggerContainer className="space-y-8">
@@ -115,23 +122,23 @@ export default function Home() {
               onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
               onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
             >
-              {isLoadingClasses ? (
+              {isLoadingSchedule ? (
                 <div className="p-3">
                   <ListSkeleton rows={4} />
                 </div>
-              ) : classesError ? (
+              ) : scheduleError ? (
                 <div className="absolute inset-0 flex items-center justify-center text-[13px]" style={{ color: "var(--danger)" }}>
-                  {classesError}
+                  {scheduleError}
                 </div>
-              ) : todayClasses.length === 0 ? (
+              ) : todayTimeline.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ color: "var(--text-tertiary)" }}>
                   <Calendar className="w-10 h-10 mb-3 opacity-30" />
-                  <p className="text-[13px]">今天没有课程安排</p>
+                  <p className="text-[13px]">今天没有课程或考试安排</p>
                 </div>
               ) : (
                 <div className="p-2 space-y-1">
-                  {todayClasses.map((lesson, i) => {
-                    const c = getSubjectColor(lesson.subject);
+                  {todayTimeline.map((item, i) => {
+                    const c = getSubjectColor(item.subject);
                     return (
                       <motion.div
                         key={i}
@@ -143,25 +150,35 @@ export default function Home() {
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                       >
                         <div className="flex flex-col items-center min-w-[52px] pt-0.5">
-                          <span className="text-[14px] font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>{lesson.startTime}</span>
-                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--text-tertiary)" }}>{lesson.endTime}</span>
+                          <span className="text-[14px] font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>{item.startTime}</span>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--text-tertiary)" }}>{item.endTime}</span>
                         </div>
                         <div className="w-[3px] h-10 rounded-full mt-0.5" style={{ background: c.text, opacity: 0.4 }} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <h4 className="text-[14px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>{lesson.subject}</h4>
-                            {lesson.period && (
+                            <h4 className="text-[14px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>{item.subject}</h4>
+                            {item.kind === "lesson" && item.period && (
                               <span
                                 className="px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0"
                                 style={{ background: "var(--bg-secondary)", color: "var(--text-tertiary)" }}
                               >
-                                {lesson.period}
+                                {item.period}
+                              </span>
+                            )}
+                            {item.kind === "exam" && (
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 inline-flex items-center gap-1"
+                                style={{ background: "rgba(255,149,0,0.12)", color: "#ff9500" }}
+                              >
+                                <FileText className="w-3 h-3" />
+                                考试
                               </span>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                            {lesson.room && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {lesson.room}</span>}
-                            {lesson.teacher && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {lesson.teacher}</span>}
+                            {item.room && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {item.room}</span>}
+                            {item.kind === "lesson" && item.teacher && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {item.teacher}</span>}
+                            {item.kind === "exam" && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 考试安排</span>}
                           </div>
                         </div>
                       </motion.div>

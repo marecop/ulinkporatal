@@ -1,9 +1,11 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
 import { motion } from "motion/react";
 import { useTheme, type ThemeMode, type AccentColor } from "../context/ThemeContext";
-import { Sun, Moon, Monitor, Check, Sparkles, Globe, Image } from "lucide-react";
+import { Sun, Moon, Monitor, Check, Sparkles, Globe, Image, Link2, RefreshCw, Unplug, AlertCircle, Cloud } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { useMicrosoftBinding } from "../hooks/useMicrosoftBinding";
 
 const themeModes: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "浅色", icon: Sun },
@@ -21,6 +23,46 @@ const accentColors: { id: AccentColor; label: string; lightColor: string; darkCo
 
 export default function Settings() {
   const { theme, themeMode, accentColor, animationsEnabled, setThemeMode, setAccentColor, setAnimationsEnabled } = useTheme();
+  const [searchParams] = useSearchParams();
+  const { status: microsoftStatus, loading: microsoftLoading, syncing: microsoftSyncing, error: microsoftError, unbind, syncNow } = useMicrosoftBinding();
+
+  const microsoftBanner = useMemo(() => {
+    const state = searchParams.get("ms");
+    if (!state) return null;
+
+    const reason = searchParams.get("reason");
+    const messages: Record<string, { tone: "success" | "warning" | "danger"; text: string }> = {
+      connected: { tone: "success", text: "Microsoft 账号已成功绑定，可开始同步考试安排。" },
+      "config-error": { tone: "warning", text: "Microsoft 集成尚未完成配置，请先补齐服务器环境变量与数据库。" },
+      "portal-auth-required": { tone: "warning", text: "当前门户登录已失效，请重新登录后再绑定 Microsoft 账号。" },
+      "state-error": { tone: "danger", text: "Microsoft 授权状态校验失败，请重新发起绑定。" },
+      "oauth-error": { tone: "danger", text: `Microsoft 授权失败${reason ? `：${reason}` : ""}` },
+      "connect-error": { tone: "danger", text: `无法发起 Microsoft 授权${reason ? `：${reason}` : ""}` },
+      "callback-error": { tone: "danger", text: `Microsoft 回调处理失败${reason ? `：${reason}` : ""}` },
+    };
+
+    return messages[state] ?? null;
+  }, [searchParams]);
+
+  const handleMicrosoftConnect = () => {
+    window.location.href = "/api/microsoft/connect";
+  };
+
+  const handleMicrosoftUnbind = async () => {
+    try {
+      await unbind();
+    } catch {
+      // hook state already captures errors
+    }
+  };
+
+  const handleSync = async () => {
+    try {
+      await syncNow();
+    } catch {
+      // hook state already captures errors
+    }
+  };
 
   return (
     <PageTransition>
@@ -29,6 +71,22 @@ export default function Settings() {
           <h1 className="text-[32px] font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>设置</h1>
           <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>自定义您的门户体验</p>
         </StaggerItem>
+
+        {microsoftBanner && (
+          <StaggerItem>
+            <div
+              className="rounded-2xl border px-4 py-3 flex items-start gap-3"
+              style={{
+                background: microsoftBanner.tone === "success" ? "rgba(52,199,89,0.08)" : microsoftBanner.tone === "warning" ? "rgba(255,149,0,0.08)" : "rgba(255,59,48,0.08)",
+                borderColor: microsoftBanner.tone === "success" ? "rgba(52,199,89,0.22)" : microsoftBanner.tone === "warning" ? "rgba(255,149,0,0.22)" : "rgba(255,59,48,0.22)",
+                color: microsoftBanner.tone === "success" ? "#34c759" : microsoftBanner.tone === "warning" ? "#ff9500" : "var(--danger)",
+              }}
+            >
+              <AlertCircle className="w-4.5 h-4.5 mt-0.5 flex-shrink-0" />
+              <p className="text-[13px] font-medium leading-6">{microsoftBanner.text}</p>
+            </div>
+          </StaggerItem>
+        )}
 
         {/* Theme Mode */}
         <StaggerItem>
@@ -129,6 +187,72 @@ export default function Settings() {
           </SettingsSection>
         </StaggerItem>
 
+        <StaggerItem>
+          <SettingsSection title="Microsoft 账号绑定（用于获取考试信息）" description="绑定后可从学校 SharePoint 自动同步当前学生的考试安排">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl" style={{ background: "var(--bg-secondary)" }}>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: "var(--accent-soft)" }}
+                >
+                  <Cloud className="w-5 h-5" style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                    {microsoftLoading
+                      ? "正在检查绑定状态"
+                      : microsoftStatus?.bound
+                        ? (microsoftStatus.email || "已绑定 Microsoft 账号")
+                        : "未绑定 Microsoft 账号"}
+                  </p>
+                  <p className="text-[11px] leading-5" style={{ color: "var(--text-tertiary)" }}>
+                    {!microsoftStatus?.configured
+                      ? "服务器尚未完成 Microsoft / 数据库配置。"
+                      : microsoftStatus?.bound
+                        ? `最近同步：${microsoftStatus.lastSyncAt ? new Date(microsoftStatus.lastSyncAt).toLocaleString("zh-CN") : "尚未同步"}${microsoftStatus.lastSyncMessage ? ` · ${microsoftStatus.lastSyncMessage}` : ""}`
+                        : "绑定后系统会通过 Microsoft Graph 读取 SharePoint 中的考试文件。"}
+                  </p>
+                </div>
+                <span
+                  className="text-[11px] px-2 py-1 rounded-full font-semibold flex-shrink-0"
+                  style={{
+                    background: microsoftStatus?.bound ? "var(--accent-soft)" : "var(--bg-tertiary)",
+                    color: microsoftStatus?.bound ? "var(--accent)" : "var(--text-secondary)",
+                  }}
+                >
+                  {microsoftStatus?.bound ? "已绑定" : "未绑定"}
+                </span>
+              </div>
+
+              {microsoftError && (
+                <div className="px-4 py-3 rounded-xl text-[12px] font-medium" style={{ background: "rgba(255,59,48,0.08)", color: "var(--danger)" }}>
+                  {microsoftError}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {!microsoftStatus?.bound ? (
+                  <ActionButton icon={Link2} onClick={handleMicrosoftConnect} disabled={microsoftLoading || !microsoftStatus?.configured}>
+                    绑定 Microsoft 账号
+                  </ActionButton>
+                ) : (
+                  <>
+                    <ActionButton icon={RefreshCw} onClick={handleSync} disabled={microsoftSyncing}>
+                      {microsoftSyncing ? "同步中..." : "立即同步考试安排"}
+                    </ActionButton>
+                    <ActionButton icon={Link2} onClick={handleMicrosoftConnect} variant="secondary">
+                      重新绑定
+                    </ActionButton>
+                    <ActionButton icon={Unplug} onClick={handleMicrosoftUnbind} variant="danger">
+                      解绑
+                    </ActionButton>
+                  </>
+                )}
+              </div>
+            </div>
+          </SettingsSection>
+        </StaggerItem>
+
         {/* Language (placeholder) */}
         <StaggerItem>
           <SettingsSection title="语言" description="界面显示语言设置">
@@ -211,5 +335,41 @@ function ToggleRow({ icon: Icon, label, description, checked, onChange }: {
         />
       </motion.div>
     </button>
+  );
+}
+
+function ActionButton({
+  icon: Icon,
+  children,
+  onClick,
+  disabled = false,
+  variant = "primary",
+}: {
+  icon: typeof Link2;
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "secondary" | "danger";
+}) {
+  const palette = variant === "primary"
+    ? { background: "var(--accent)", color: "#fff", borderColor: "transparent" }
+    : variant === "danger"
+      ? { background: "rgba(255,59,48,0.08)", color: "var(--danger)", borderColor: "rgba(255,59,48,0.16)" }
+      : { background: "var(--bg-secondary)", color: "var(--text-primary)", borderColor: "var(--border)" };
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+      style={palette}
+      whileHover={disabled ? undefined : { scale: 1.02 }}
+      whileTap={disabled ? undefined : { scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+    >
+      <Icon className="w-4 h-4" />
+      {children}
+    </motion.button>
   );
 }
