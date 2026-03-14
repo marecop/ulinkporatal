@@ -237,19 +237,15 @@ async function parseWorkbook(file: DownloadedGraphFile) {
 }
 
 async function parsePdf(file: DownloadedGraphFile) {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: file.buffer });
-  try {
-    const parsed = await parser.getText();
-    const lines = parsed.text
-      .split(/\r?\n/)
-      .map(line => splitTabularLine(line))
-      .filter(cells => cells.length > 0);
+  const pdfModule = await import("pdf-parse");
+  const pdfParse = (pdfModule.default ?? pdfModule) as (data: Buffer) => Promise<{ text: string }>;
+  const parsed = await pdfParse(file.buffer);
+  const lines = parsed.text
+    .split(/\r?\n/)
+    .map(line => splitTabularLine(line))
+    .filter(cells => cells.length > 0);
 
-    return parseAttendanceRows(lines, file.name);
-  } finally {
-    await parser.destroy();
-  }
+  return parseAttendanceRows(lines, file.name);
 }
 
 export async function parseAttendanceFile(file: DownloadedGraphFile): Promise<ParsedAttendanceResult> {

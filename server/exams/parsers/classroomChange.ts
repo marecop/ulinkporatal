@@ -158,18 +158,14 @@ async function parseWorkbook(file: DownloadedGraphFile): Promise<ParsedClassroom
 }
 
 async function parsePdf(file: DownloadedGraphFile): Promise<ParsedClassroomChangeResult> {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: file.buffer });
-  try {
-    const parsed = await parser.getText();
-    const rows = parsed.text
-      .split(/\r?\n/)
-      .map(line => splitTabularLine(line))
-      .filter(cells => cells.length > 0);
-    return parseRows(rows, file.name);
-  } finally {
-    await parser.destroy();
-  }
+  const pdfModule = await import("pdf-parse");
+  const pdfParse = (pdfModule.default ?? pdfModule) as (data: Buffer) => Promise<{ text: string }>;
+  const parsed = await pdfParse(file.buffer);
+  const rows = parsed.text
+    .split(/\r?\n/)
+    .map(line => splitTabularLine(line))
+    .filter(cells => cells.length > 0);
+  return parseRows(rows, file.name);
 }
 
 export async function parseClassroomChangeFile(file: DownloadedGraphFile): Promise<ParsedClassroomChangeResult> {
