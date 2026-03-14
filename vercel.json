@@ -1,12 +1,6 @@
 {
   "version": 2,
-  "functions": {
-    "server.ts": {
-      "runtime": "nodejs22.x",
-      "maxDuration": 60,
-      "regions": ["hkg1"]
-    }
-  },
+  "regions": ["hkg1"],
   "builds": [
     {
       "src": "server.ts",

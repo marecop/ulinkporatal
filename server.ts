@@ -16,6 +16,8 @@ const isVercel = Boolean(process.env.VERCEL);
 const isProd = process.env.NODE_ENV === "production" || isVercel;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+export const maxDuration = 60;
+
 type SessionPayload = {
   authCookies: string;
   pupilId?: string;
