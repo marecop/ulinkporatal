@@ -107,3 +107,68 @@ export function formatExamDate(dateString: string) {
     weekday: "short",
   });
 }
+
+function parseTimeToMinutes(value: string) {
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match?.[1] || !match[2]) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export function formatDurationMinutes(durationMinutes: number | null | undefined, startTime?: string, endTime?: string) {
+  let totalMinutes = durationMinutes ?? null;
+
+  if (totalMinutes === null && startTime && endTime) {
+    const start = parseTimeToMinutes(startTime);
+    const end = parseTimeToMinutes(endTime);
+    if (start !== null && end !== null && end > start) {
+      totalMinutes = end - start;
+    }
+  }
+
+  if (totalMinutes === null || totalMinutes <= 0) return "";
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours}小时${minutes}分钟`;
+  }
+  if (hours > 0) {
+    return `${hours}小时`;
+  }
+  return `${minutes}分钟`;
+}
+
+export function getExamDateTime(exam: ExamRecord) {
+  const candidate = new Date(`${exam.examDate}T${exam.startTime}:00`);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
+}
+
+export function groupExamsByDate(exams: ExamRecord[]) {
+  const groups = new Map<string, ExamRecord[]>();
+  const sorted = [...exams].sort((left, right) => {
+    const leftKey = `${left.examDate} ${left.startTime} ${left.subject} ${left.paperName ?? ""}`;
+    const rightKey = `${right.examDate} ${right.startTime} ${right.subject} ${right.paperName ?? ""}`;
+    return leftKey.localeCompare(rightKey);
+  });
+
+  for (const exam of sorted) {
+    const bucket = groups.get(exam.examDate) ?? [];
+    bucket.push(exam);
+    groups.set(exam.examDate, bucket);
+  }
+
+  return Array.from(groups.entries()).map(([date, items]) => ({ date, items }));
+}
+
+export function getNextUpcomingExam(exams: ExamRecord[], referenceDate = new Date()) {
+  return [...exams]
+    .filter((exam) => {
+      const end = new Date(`${exam.examDate}T${exam.endTime}:00`);
+      return !Number.isNaN(end.getTime()) && end >= referenceDate;
+    })
+    .sort((left, right) => {
+      const leftDate = getExamDateTime(left)?.getTime() ?? Number.POSITIVE_INFINITY;
+      const rightDate = getExamDateTime(right)?.getTime() ?? Number.POSITIVE_INFINITY;
+      return leftDate - rightDate;
+    })[0] ?? null;
+}

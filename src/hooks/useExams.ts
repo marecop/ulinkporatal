@@ -118,7 +118,11 @@ export function useExams(options?: { autoSync?: boolean }) {
 
     try {
       const today = getCurrentLocalDate();
-      const response = await fetchJsonWithTimeout(`/api/exams?today=${encodeURIComponent(today)}`, { credentials: "include" }, READ_FETCH_TIMEOUT_MS);
+      const response = await fetchJsonWithTimeout(
+        `/api/exams?today=${encodeURIComponent(today)}&from=${encodeURIComponent(today)}`,
+        { credentials: "include" },
+        READ_FETCH_TIMEOUT_MS,
+      );
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

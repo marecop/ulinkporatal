@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Home, User, GraduationCap, Target, FileText, Info,
+  Home, User, GraduationCap, Target, FileText, CalendarRange,
   MessageSquare, ShieldAlert, Calendar, Activity,
   Book, Globe, LogOut, Settings,
 } from "lucide-react";
@@ -14,7 +14,7 @@ const navItems = [
   { name: "成绩", path: "/grades", icon: GraduationCap },
   { name: "分数", path: "/scores", icon: Target },
   { name: "成绩报告", path: "/reports", icon: FileText },
-  { name: "额外信息", path: "/extra", icon: Info },
+  { name: "考试信息", path: "/exams", icon: CalendarRange },
   { name: "我的报告评论", path: "/comments", icon: MessageSquare },
   { name: "我的DMS", path: "/dms", icon: ShieldAlert },
   { name: "周时间表", path: "/schedule", icon: Calendar },

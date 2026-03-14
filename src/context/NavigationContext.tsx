@@ -9,7 +9,7 @@ interface NavigationContextType {
 
 const navOrder = [
   "/home", "/details", "/grades", "/scores", "/reports",
-  "/extra", "/comments", "/dms", "/schedule", "/activities",
+  "/exams", "/comments", "/dms", "/schedule", "/activities",
   "/diary", "/websites", "/settings",
 ];
 

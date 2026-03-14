@@ -7,6 +7,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import {
   deleteMicrosoftBinding,
+  getExamScheduleState,
   getMicrosoftBinding,
   isDatabaseConfigured,
   listExamRecords,
@@ -21,6 +22,7 @@ import {
   refreshMicrosoftAccessToken,
 } from "./server/microsoft/oauth.js";
 import {
+  ensureTemporaryFallbackExamData,
   getTemporaryFallbackExamRecords,
   resolveTemporaryFallbackToday,
 } from "./server/exams/temporaryFallback.js";
@@ -136,18 +138,6 @@ function clearSession(res: express.Response) {
 
 function getAuthCookies(req: express.Request): string | null {
   return readSession(req)?.authCookies ?? null;
-}
-
-function getRequestOrigin(req: express.Request) {
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : (forwardedProto?.split(",")[0] || req.protocol || (isProd ? "https" : "http"));
-  const host = req.get("host");
-  if (!host) {
-    throw new Error("Host header is missing");
-  }
-  return `${protocol}://${host}`;
 }
 
 function updateSession(res: express.Response, req: express.Request, patch: Partial<SessionPayload>) {
@@ -675,7 +665,7 @@ async function createApp() {
   });
 
   app.post("/api/login", async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, localDate } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password are required" });
@@ -758,7 +748,34 @@ async function createApp() {
           console.warn("Pupil ID warm-up skipped:", error.message);
         }
 
+        let studentDetails: PortalStudentDetails | null = null;
+        const refreshToday = resolveTemporaryFallbackToday(typeof localDate === "string" ? localDate : undefined);
+
+        if (isDatabaseConfigured()) {
+          try {
+            studentDetails = await fetchStudentDetailsFromPortal(allCookies);
+            if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+              pupilId = studentDetails.pupilId;
+            }
+          } catch (error: any) {
+            console.warn("Student details warm-up skipped:", error.message);
+          }
+        }
+
         writeSession(res, { authCookies: allCookies, pupilId });
+
+        if (isDatabaseConfigured() && pupilId && studentDetails?.middleName) {
+          try {
+            await ensureTemporaryFallbackExamData({
+              pupilId,
+              middleName: studentDetails.middleName,
+              today: refreshToday,
+            });
+          } catch (error: any) {
+            console.warn("Temporary exam refresh skipped during login:", error.message);
+          }
+        }
+
         return res.json({ success: true, pupilIdResolved: Boolean(pupilId) });
       }
 
@@ -1305,7 +1322,10 @@ async function createApp() {
     const databaseConfigured = isDatabaseConfigured();
     const microsoftConfigured = isMicrosoftConfigured();
     const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
+    const fullyConfigured = databaseConfigured && microsoftConfigured && tokenEncryptionConfigured;
     const today = resolveTemporaryFallbackToday(typeof req.query.today === "string" ? req.query.today : undefined);
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
     try {
       let pupilId = session.pupilId ?? "";
@@ -1319,24 +1339,50 @@ async function createApp() {
           updateSession(res, req, { pupilId });
         }
 
+        if (databaseConfigured && pupilId && studentDetails.middleName) {
+          await ensureTemporaryFallbackExamData({
+            pupilId,
+            middleName: studentDetails.middleName,
+            today,
+          });
+
+          const state = await getExamScheduleState(pupilId);
+          const exams = await listExamRecords(pupilId, { from, to });
+
+          return res.json({
+            configured: fullyConfigured,
+            bound: false,
+            bindingStatusKnown: true,
+            pupilResolved: Boolean(pupilId),
+            pupilId: pupilId || undefined,
+            email: null,
+            lastSyncAt: state?.lastRefreshAt ?? null,
+            lastSyncStatus: state?.lastRefreshStatus ?? null,
+            lastSyncMessage: state?.lastRefreshMessage ?? `当前使用本地 Mock Exam 文件（有效至 2026-03-24）`,
+            exams,
+            databaseConfigured,
+            microsoftConfigured,
+            tokenEncryptionConfigured,
+          });
+        }
+
         if (studentDetails.middleName) {
           const fallback = await getTemporaryFallbackExamRecords({
-            baseUrl: getRequestOrigin(req),
             middleName: studentDetails.middleName,
             today,
           });
 
           if (fallback.active) {
             return res.json({
-              configured: databaseConfigured && microsoftConfigured && tokenEncryptionConfigured,
+              configured: fullyConfigured,
               bound: false,
-              bindingStatusKnown: databaseConfigured ? true : false,
+              bindingStatusKnown: false,
               pupilResolved: Boolean(pupilId),
               pupilId: pupilId || undefined,
               email: null,
               lastSyncAt: null,
               lastSyncStatus: null,
-              lastSyncMessage: `当前使用临时考试文件（有效至 ${fallback.cutoffDate}）`,
+              lastSyncMessage: `当前使用本地 Mock Exam 文件（有效至 ${fallback.cutoffDate}）`,
               exams: fallback.exams,
               databaseConfigured,
               microsoftConfigured,
@@ -1346,7 +1392,7 @@ async function createApp() {
         }
       }
 
-      if (!databaseConfigured || !microsoftConfigured || !tokenEncryptionConfigured) {
+      if (!fullyConfigured) {
         return res.json({
           configured: false,
           bound: false,
@@ -1362,7 +1408,7 @@ async function createApp() {
 
       if (!pupilId) {
         return res.json({
-          configured: true,
+          configured: fullyConfigured,
           bound: false,
           bindingStatusKnown: false,
           pupilResolved: false,
@@ -1381,12 +1427,10 @@ async function createApp() {
         binding = await getMicrosoftBinding(pupilId);
       }
 
-      const from = typeof req.query.from === "string" ? req.query.from : undefined;
-      const to = typeof req.query.to === "string" ? req.query.to : undefined;
       const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
 
       return res.json({
-        configured: true,
+        configured: fullyConfigured,
         bound: Boolean(binding),
         bindingStatusKnown: true,
         pupilResolved: true,

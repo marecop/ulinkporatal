@@ -1,12 +1,12 @@
 import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
-import { Calendar, Clock, MapPin, ChevronRight, User, Activity, FileText } from "lucide-react";
+import { Calendar, Clock, MapPin, ChevronRight, User, Activity, FileText, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { ListSkeleton } from "../components/Skeleton";
 import { useExams } from "../hooks/useExams";
-import { buildTodayTimeline } from "../lib/exam";
+import { buildTodayTimeline, formatDurationMinutes, formatExamDate, getNextUpcomingExam } from "../lib/exam";
 
 interface Lesson {
   day: string;
@@ -85,6 +85,7 @@ export default function Home() {
   }, []);
 
   const todayTimeline = buildTodayTimeline(todayClasses, examsData?.exams ?? []);
+  const nextUpcomingExam = getNextUpcomingExam(examsData?.exams ?? []);
   const isLoadingSchedule = isLoadingClasses;
   const scheduleError = classesError;
 
@@ -256,6 +257,102 @@ export default function Home() {
             </div>
           </StaggerItem>
         </div>
+
+        <StaggerItem>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h2 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+              下一场考试
+            </h2>
+            <Link
+              to="/exams"
+              className="text-[13px] font-semibold flex items-center gap-0.5 transition-colors"
+              style={{ color: "var(--accent)" }}
+            >
+              查看全部 <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div
+            className="rounded-2xl border overflow-hidden min-h-[180px] relative transition-shadow duration-300"
+            style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
+            onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--card-shadow-hover)")}
+            onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--card-shadow)")}
+          >
+            {!examsData ? (
+              <div className="p-3">
+                <ListSkeleton rows={2} />
+              </div>
+            ) : !nextUpcomingExam ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ color: "var(--text-tertiary)" }}>
+                <FileText className="w-10 h-10 mb-3 opacity-30" />
+                <p className="text-[13px]">当前没有即将到来的考试安排</p>
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-5"
+              >
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[12px] font-bold"
+                    style={{ background: "rgba(255,149,0,0.12)", color: "#ff9500" }}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    即将开始
+                  </span>
+                  <span
+                    className="inline-flex items-center px-2 py-1 rounded-lg text-[12px] font-semibold"
+                    style={{ background: "var(--bg-secondary)", color: "var(--text-secondary)" }}
+                  >
+                    {formatExamDate(nextUpcomingExam.examDate)}
+                  </span>
+                </div>
+
+                <h3 className="text-[18px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {nextUpcomingExam.subject}
+                </h3>
+                <p className="text-[13px] mt-1" style={{ color: "var(--text-secondary)" }}>
+                  {nextUpcomingExam.paperName || "试卷名称待识别"}
+                </p>
+
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    {nextUpcomingExam.startTime}-{nextUpcomingExam.endTime}
+                  </span>
+                  {!!formatDurationMinutes(nextUpcomingExam.durationMinutes, nextUpcomingExam.startTime, nextUpcomingExam.endTime) && (
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      {formatDurationMinutes(nextUpcomingExam.durationMinutes, nextUpcomingExam.startTime, nextUpcomingExam.endTime)}
+                    </span>
+                  )}
+                  {nextUpcomingExam.room && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" />
+                      {nextUpcomingExam.room}
+                    </span>
+                  )}
+                </div>
+
+                {nextUpcomingExam.supervisionStartTime && nextUpcomingExam.supervisionEndTime && (
+                  <div
+                    className="mt-4 rounded-xl border px-4 py-3"
+                    style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Shield className="w-4 h-4" style={{ color: "#ff9500" }} />
+                      <span className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>全面监管</span>
+                    </div>
+                    <p className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                      {nextUpcomingExam.supervisionStartTime}-{nextUpcomingExam.supervisionEndTime}
+                      {nextUpcomingExam.nextExamRoom ? ` · 房间 ${nextUpcomingExam.nextExamRoom}` : ""}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </div>
+        </StaggerItem>
       </StaggerContainer>
     </PageTransition>
   );

@@ -162,10 +162,12 @@ export default function Login() {
     setError("");
     setTransitioning(true);
 
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const apiCall = fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, localDate }),
       credentials: "include",
     }).then(async res => {
       const data = await res.json();

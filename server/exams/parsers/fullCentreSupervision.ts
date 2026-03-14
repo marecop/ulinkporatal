@@ -1,14 +1,18 @@
-import type { DownloadedGraphFile, ExamSession, ParsedAttendanceResult, ParsedStudentRow } from "../types.js";
+import type {
+  DownloadedGraphFile,
+  ParsedFullCentreSupervisionResult,
+  ParsedStudentRow,
+  SupervisionBlock,
+  SupervisionSeatRoomRule,
+} from "../types.js";
 import {
   cleanCells,
   collapseWhitespace,
-  dedupeStrings,
   extractDate,
   extractRoomFromText,
   extractTimeRange,
   hasStructuredStudentData,
   looksLikeFooter,
-  looksLikeSessionBoundary,
   looksLikeStudentHeader,
   splitTabularLine,
 } from "../utils.js";
@@ -28,10 +32,10 @@ function buildHeaderMap(cells: string[]): HeaderMap {
   cells.forEach((cell, index) => {
     const lowered = cell.toLowerCase();
     if (lowered.includes("seating") || lowered.includes("seat")) headerMap.seatNumber = index;
-    if (lowered.includes("homeroom")) headerMap.homeroom = index;
+    if (lowered.includes("class") || lowered.includes("homeroom")) headerMap.homeroom = index;
     if (lowered.includes("candidate")) headerMap.candidateNumber = index;
     if (lowered.includes("chinese")) headerMap.chineseName = index;
-    if (lowered.includes("passport")) headerMap.passportName = index;
+    if (lowered.includes("pinyin") || lowered.includes("passport")) headerMap.passportName = index;
     if (lowered.includes("english")) headerMap.englishName = index;
   });
 
@@ -88,133 +92,104 @@ function parseStudentRow(cells: string[], headerMap: HeaderMap): ParsedStudentRo
   return structured;
 }
 
-function looksLikePaperCode(value: string) {
-  return /^[A-Z0-9]{3,6}\/\d{1,2}$/i.test(value) || /^\d{4}\/\d{2}$/i.test(value);
-}
+function extractSeatRoomRules(text: string) {
+  const rules: SupervisionSeatRoomRule[] = [];
+  const normalized = text.replace(/\r/g, "\n");
 
-function normalizeSubjectDisplay(value: string) {
-  const normalized = collapseWhitespace(value)
-    .replace(/^(cambridge\s+(international\s+)?(i?gcse|international as & a level|as & a level)|pearson\s+edexcel|edexcel)\s+/i, "")
-    .trim();
-  return normalized || collapseWhitespace(value);
-}
+  for (const line of normalized.split(/\n+/)) {
+    const compact = collapseWhitespace(line);
+    if (!compact) continue;
+    const match = compact.match(/NO\.?\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?.*?\b([A-Za-z]{1,5}\s*\d{2,4}[A-Za-z]?)\b/i);
+    if (!match?.[1] || !match[3]) continue;
 
-function shouldSkipDescriptorRow(rowText: string) {
-  const lowered = rowText.toLowerCase();
-  return lowered.includes("centre number")
-    || lowered.includes("actual start time")
-    || lowered.includes("actual end time")
-    || lowered.startsWith("note")
-    || lowered.includes("room")
-    || Boolean(extractDate(rowText))
-    || Boolean(extractTimeRange(rowText));
-}
+    const startSeat = Number(match[1]);
+    const endSeat = Number(match[2] ?? match[1]);
+    if (!Number.isFinite(startSeat) || !Number.isFinite(endSeat)) continue;
 
-function extractSessionDescriptor(metaRows: string[][]) {
-  const subjectCandidates: string[] = [];
-  const paperCandidates: string[] = [];
-  let paperCode = "";
-
-  for (const row of metaRows) {
-    const rowText = collapseWhitespace(row.join(" "));
-    if (!rowText || shouldSkipDescriptorRow(rowText)) {
-      continue;
-    }
-
-    const cleaned = row
-      .map(cell => collapseWhitespace(cell))
-      .filter(Boolean);
-
-    for (const cell of cleaned) {
-      if (!paperCode && looksLikePaperCode(cell)) {
-        paperCode = cell;
-      }
-    }
-
-    const descriptorCells = cleaned.filter((cell) => {
-      const lowered = cell.toLowerCase();
-      return !looksLikePaperCode(cell)
-        && !/^group\s+\d+$/i.test(cell)
-        && !lowered.includes("attendance")
-        && !lowered.includes("signature")
-        && !lowered.includes("invigilator");
+    rules.push({
+      startSeat,
+      endSeat,
+      room: collapseWhitespace(match[3]).replace(/\s+/g, "").toUpperCase(),
     });
-
-    if (!descriptorCells.length) {
-      continue;
-    }
-
-    if (descriptorCells.length === 1) {
-      const onlyCell = descriptorCells[0];
-      const splitPaper = onlyCell.match(/^(.*?)(paper\s*\d.*)$/i);
-      if (splitPaper?.[1] && splitPaper[2]) {
-        subjectCandidates.push(splitPaper[1].trim());
-        paperCandidates.push(splitPaper[2].trim());
-      } else if (/paper|practical|coursework|writing|reading|listening|speaking|test/i.test(onlyCell)) {
-        paperCandidates.push(onlyCell);
-      } else {
-        subjectCandidates.push(onlyCell);
-      }
-      continue;
-    }
-
-    subjectCandidates.push(descriptorCells[0]);
-    const trailingPaper = descriptorCells.slice(1).find(cell => /paper|practical|coursework|writing|reading|listening|speaking|test/i.test(cell));
-    if (trailingPaper) {
-      paperCandidates.push(trailingPaper);
-    } else if (descriptorCells.length > 1) {
-      paperCandidates.push(descriptorCells.slice(1).join(" / "));
-    }
   }
 
-  return {
-    subject: normalizeSubjectDisplay(dedupeStrings(subjectCandidates).join(" / ") || "Unknown Subject"),
-    paperName: collapseWhitespace(dedupeStrings(paperCandidates).join(" / ")),
-    paperCode,
-  };
+  return rules;
 }
 
-function buildSessionFromBlock(
+function extractNextExamName(text: string) {
+  const normalized = collapseWhitespace(text.replace(/\r/g, " ").replace(/\n/g, " "));
+  if (!normalized) return "";
+
+  let value = normalized.replace(/^next exam\s*[：:﹕]?\s*/i, "").trim();
+  const timeRange = extractTimeRange(value);
+  if (timeRange) {
+    value = value.replace(/[，,]?\s*\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2}.*/, "").trim();
+  }
+
+  value = value.replace(/\b[A-Z]?\d{4}\/\d{2}\b/gi, "").replace(/\s{2,}/g, " ").trim();
+  value = value.replace(/\s*-\s*/g, " - ");
+  return value.replace(/[，,]\s*$/, "").trim();
+}
+
+function buildBlock(
   metaRows: string[][],
   studentRows: string[][],
   headerMap: HeaderMap,
   sourceLabel: string,
-): ExamSession | null {
+): SupervisionBlock | null {
   let examDate = "";
-  let startTime = "";
-  let endTime = "";
-  let room = "";
+  let supervisionStartTime = "";
+  let supervisionEndTime = "";
+  let supervisionRoom = "";
+  let nextExamName = "";
+  let nextExamStartTime = "";
+  let nextExamEndTime = "";
+  const seatRoomRules: SupervisionSeatRoomRule[] = [];
   const rawLines: string[] = [];
   const students: ParsedStudentRow[] = [];
-  const descriptor = extractSessionDescriptor(metaRows);
 
   for (const row of metaRows) {
     const rowText = collapseWhitespace(row.join(" "));
     if (!rowText) continue;
     rawLines.push(rowText);
-    const loweredRow = rowText.toLowerCase();
+    const lowered = rowText.toLowerCase();
 
     if (!examDate) {
       examDate = extractDate(rowText) ?? "";
     }
 
-    if (!startTime || !endTime) {
+    if (!supervisionStartTime && lowered.includes("supervision time")) {
       const range = extractTimeRange(rowText);
       if (range) {
-        startTime = range.startTime;
-        endTime = range.endTime;
+        supervisionStartTime = range.startTime;
+        supervisionEndTime = range.endTime;
       }
     }
 
-    if (!room && loweredRow.includes("room")) {
-      room = extractRoomFromText(rowText);
+    if (!supervisionRoom && lowered.includes("supervision room")) {
+      supervisionRoom = extractRoomFromText(rowText);
+    }
+
+    if (lowered.startsWith("next exam")) {
+      const range = extractTimeRange(rowText);
+      if (range && !nextExamStartTime) {
+        nextExamStartTime = range.startTime;
+        nextExamEndTime = range.endTime;
+      }
+
+      if (!nextExamName && !lowered.includes("should go to")) {
+        nextExamName = extractNextExamName(rowText);
+      }
+
+      seatRoomRules.push(...extractSeatRoomRules(row.join("\n")));
     }
   }
 
   for (const row of studentRows) {
     const rowText = collapseWhitespace(row.join(" "));
     if (!rowText) continue;
-    if (looksLikeFooter(rowText) || looksLikeSessionBoundary(rowText)) break;
+    if (looksLikeFooter(rowText)) break;
+
     rawLines.push(rowText);
     const student = parseStudentRow(row, headerMap);
     if (student) {
@@ -222,26 +197,33 @@ function buildSessionFromBlock(
     }
   }
 
-  if (!examDate || !startTime || !endTime) {
+  if (!examDate || !supervisionStartTime || !supervisionEndTime) {
     return null;
   }
 
   return {
-    subject: descriptor.subject || "Unknown Subject",
-    paperName: descriptor.paperName,
-    paperCode: descriptor.paperCode || undefined,
     examDate,
-    startTime,
-    endTime,
-    room,
+    supervisionStartTime,
+    supervisionEndTime,
+    supervisionRoom,
+    nextExamName,
+    nextExamStartTime,
+    nextExamEndTime,
+    seatRoomRules,
     students,
-    rawText: rawLines.join("\n"),
+    rawText: `${sourceLabel}\n${rawLines.join("\n")}`,
     sourceLabel,
   };
 }
 
-function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAttendanceResult {
-  const sessions: ExamSession[] = [];
+function looksLikeSupervisionBoundary(text: string) {
+  const lowered = collapseWhitespace(text).toLowerCase();
+  return lowered.includes("full centre supervision attendance sheet")
+    || (lowered.includes("supervision time") && Boolean(extractDate(text)));
+}
+
+function parseSupervisionRows(rows: string[][], sourceLabel: string): ParsedFullCentreSupervisionResult {
+  const blocks: SupervisionBlock[] = [];
   const warnings: string[] = [];
   let lastConsumedIndex = 0;
 
@@ -250,7 +232,7 @@ function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAtten
     if (!looksLikeStudentHeader(headerRow)) continue;
 
     const headerMap = buildHeaderMap(headerRow);
-    const blockStart = Math.max(lastConsumedIndex, index - 6);
+    const blockStart = Math.max(lastConsumedIndex, index - 10);
     let blockEnd = index + 1;
 
     while (blockEnd < rows.length) {
@@ -263,9 +245,9 @@ function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAtten
       }
 
       if (
-        looksLikeStudentHeader(currentRow)
+        (looksLikeStudentHeader(currentRow) && blockEnd > index + 1)
         || looksLikeFooter(rowText)
-        || (looksLikeSessionBoundary(rowText) && blockEnd > index + 1)
+        || (looksLikeSupervisionBoundary(rowText) && blockEnd > index + 1)
       ) {
         break;
       }
@@ -275,25 +257,25 @@ function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAtten
 
     const metadataRows = rows.slice(blockStart, index).map(cleanCells).filter(row => row.length);
     const studentRows = rows.slice(index + 1, blockEnd).map(cleanCells);
-    const session = buildSessionFromBlock(metadataRows, studentRows, headerMap, sourceLabel);
+    const block = buildBlock(metadataRows, studentRows, headerMap, sourceLabel);
 
-    if (session) {
-      sessions.push(session);
+    if (block) {
+      blocks.push(block);
     } else {
-      warnings.push(`无法解析场次头部: ${sourceLabel}#${index + 1}`);
+      warnings.push(`无法解析全面监管场次: ${sourceLabel}#${index + 1}`);
     }
 
     lastConsumedIndex = blockEnd;
     index = blockEnd - 1;
   }
 
-  if (!sessions.length) {
-    warnings.push(`未能从 ${sourceLabel} 解析出任何考试场次`);
+  if (!blocks.length) {
+    warnings.push(`未能从 ${sourceLabel} 解析出任何全面监管场次`);
   }
 
   return {
-    kind: "attendance",
-    sessions,
+    kind: "full-centre-supervision",
+    blocks,
     warnings,
   };
 }
@@ -301,20 +283,20 @@ function parseAttendanceRows(rows: string[][], sourceLabel: string): ParsedAtten
 async function parseWorkbook(file: DownloadedGraphFile) {
   const XLSX = await import("xlsx");
   const workbook = XLSX.read(file.buffer, { type: "buffer" });
-  const sessions: ExamSession[] = [];
+  const blocks: SupervisionBlock[] = [];
   const warnings: string[] = [];
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
-    const result = parseAttendanceRows(rawRows.map(row => row.map(value => String(value ?? ""))), `${file.name}:${sheetName}`);
-    sessions.push(...result.sessions);
+    const result = parseSupervisionRows(rawRows.map(row => row.map(value => String(value ?? ""))), `${file.name}:${sheetName}`);
+    blocks.push(...result.blocks);
     warnings.push(...result.warnings);
   }
 
   return {
-    kind: "attendance" as const,
-    sessions,
+    kind: "full-centre-supervision" as const,
+    blocks,
     warnings,
   };
 }
@@ -328,10 +310,10 @@ async function parsePdf(file: DownloadedGraphFile) {
     .map(line => splitTabularLine(line))
     .filter(cells => cells.length > 0);
 
-  return parseAttendanceRows(lines, file.name);
+  return parseSupervisionRows(lines, file.name);
 }
 
-export async function parseAttendanceFile(file: DownloadedGraphFile): Promise<ParsedAttendanceResult> {
+export async function parseFullCentreSupervisionFile(file: DownloadedGraphFile): Promise<ParsedFullCentreSupervisionResult> {
   const lowered = file.name.toLowerCase();
 
   if (lowered.endsWith(".xlsx") || lowered.endsWith(".xls") || file.mimeType?.includes("sheet")) {
@@ -343,8 +325,8 @@ export async function parseAttendanceFile(file: DownloadedGraphFile): Promise<Pa
   }
 
   return {
-    kind: "attendance",
-    sessions: [],
-    warnings: [`不支持的考勤表文件格式: ${file.name}`],
+    kind: "full-centre-supervision",
+    blocks: [],
+    warnings: [`不支持的全面监管文件格式: ${file.name}`],
   };
 }
