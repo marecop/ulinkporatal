@@ -4,21 +4,36 @@ import type { ExamsResponse, SyncExamResponse } from "../types/exam";
 const EXAMS_CACHE_KEY = "examsData";
 const EXAMS_AUTO_SYNC_KEY = "examsAutoSyncAt";
 const AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
-const READ_FETCH_TIMEOUT_MS = 5000;
+const READ_FETCH_TIMEOUT_MS = 15000;
 const SYNC_FETCH_TIMEOUT_MS = 120000;
+
+function getCurrentLocalDate() {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function readCache() {
   try {
     const raw = sessionStorage.getItem(EXAMS_CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as ExamsResponse;
+    const parsed = JSON.parse(raw) as { localDate?: string; data?: ExamsResponse };
+    if (!parsed || parsed.localDate !== getCurrentLocalDate() || !parsed.data) {
+      return null;
+    }
+    return parsed.data;
   } catch {
     return null;
   }
 }
 
 function writeCache(data: ExamsResponse) {
-  sessionStorage.setItem(EXAMS_CACHE_KEY, JSON.stringify(data));
+  sessionStorage.setItem(EXAMS_CACHE_KEY, JSON.stringify({
+    localDate: getCurrentLocalDate(),
+    data,
+  }));
 }
 
 function shouldAutoSync(data: ExamsResponse) {
@@ -102,7 +117,8 @@ export function useExams(options?: { autoSync?: boolean }) {
     }
 
     try {
-      const response = await fetchJsonWithTimeout("/api/exams", { credentials: "include" }, READ_FETCH_TIMEOUT_MS);
+      const today = getCurrentLocalDate();
+      const response = await fetchJsonWithTimeout(`/api/exams?today=${encodeURIComponent(today)}`, { credentials: "include" }, READ_FETCH_TIMEOUT_MS);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

@@ -20,6 +20,10 @@ import {
   isMicrosoftConfigured,
   refreshMicrosoftAccessToken,
 } from "./server/microsoft/oauth.js";
+import {
+  getTemporaryFallbackExamRecords,
+  resolveTemporaryFallbackToday,
+} from "./server/exams/temporaryFallback.js";
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = "portal_session";
@@ -132,6 +136,18 @@ function clearSession(res: express.Response) {
 
 function getAuthCookies(req: express.Request): string | null {
   return readSession(req)?.authCookies ?? null;
+}
+
+function getRequestOrigin(req: express.Request) {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : (forwardedProto?.split(",")[0] || req.protocol || (isProd ? "https" : "http"));
+  const host = req.get("host");
+  if (!host) {
+    throw new Error("Host header is missing");
+  }
+  return `${protocol}://${host}`;
 }
 
 function updateSession(res: express.Response, req: express.Request, patch: Partial<SessionPayload>) {
@@ -1285,52 +1301,96 @@ async function createApp() {
     if (!session?.authCookies) {
       return res.status(401).json({ error: "Not authenticated" });
     }
+
     const databaseConfigured = isDatabaseConfigured();
     const microsoftConfigured = isMicrosoftConfigured();
     const tokenEncryptionConfigured = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
-
-    if (!databaseConfigured || !microsoftConfigured || !tokenEncryptionConfigured) {
-      return res.json({
-        configured: false,
-        bound: false,
-        bindingStatusKnown: false,
-        pupilResolved: Boolean(session.pupilId),
-        exams: [],
-        databaseConfigured,
-        microsoftConfigured,
-        tokenEncryptionConfigured,
-      });
-    }
-
-    if (!session.pupilId) {
-      return res.json({
-        configured: true,
-        bound: false,
-        bindingStatusKnown: false,
-        pupilResolved: false,
-        email: null,
-        lastSyncAt: null,
-        lastSyncStatus: null,
-        lastSyncMessage: null,
-        exams: [],
-        databaseConfigured,
-        microsoftConfigured,
-        tokenEncryptionConfigured,
-      });
-    }
+    const today = resolveTemporaryFallbackToday(typeof req.query.today === "string" ? req.query.today : undefined);
 
     try {
-      const binding = await getMicrosoftBinding(session.pupilId);
+      let pupilId = session.pupilId ?? "";
+      let binding = databaseConfigured && pupilId ? await getMicrosoftBinding(pupilId) : null;
+      let studentDetails: PortalStudentDetails | null = null;
+
+      if (!binding) {
+        studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
+        if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+          pupilId = studentDetails.pupilId;
+          updateSession(res, req, { pupilId });
+        }
+
+        if (studentDetails.middleName) {
+          const fallback = await getTemporaryFallbackExamRecords({
+            baseUrl: getRequestOrigin(req),
+            middleName: studentDetails.middleName,
+            today,
+          });
+
+          if (fallback.active) {
+            return res.json({
+              configured: databaseConfigured && microsoftConfigured && tokenEncryptionConfigured,
+              bound: false,
+              bindingStatusKnown: databaseConfigured ? true : false,
+              pupilResolved: Boolean(pupilId),
+              pupilId: pupilId || undefined,
+              email: null,
+              lastSyncAt: null,
+              lastSyncStatus: null,
+              lastSyncMessage: `当前使用临时考试文件（有效至 ${fallback.cutoffDate}）`,
+              exams: fallback.exams,
+              databaseConfigured,
+              microsoftConfigured,
+              tokenEncryptionConfigured,
+            });
+          }
+        }
+      }
+
+      if (!databaseConfigured || !microsoftConfigured || !tokenEncryptionConfigured) {
+        return res.json({
+          configured: false,
+          bound: false,
+          bindingStatusKnown: false,
+          pupilResolved: Boolean(pupilId),
+          pupilId: pupilId || undefined,
+          exams: [],
+          databaseConfigured,
+          microsoftConfigured,
+          tokenEncryptionConfigured,
+        });
+      }
+
+      if (!pupilId) {
+        return res.json({
+          configured: true,
+          bound: false,
+          bindingStatusKnown: false,
+          pupilResolved: false,
+          email: null,
+          lastSyncAt: null,
+          lastSyncStatus: null,
+          lastSyncMessage: null,
+          exams: [],
+          databaseConfigured,
+          microsoftConfigured,
+          tokenEncryptionConfigured,
+        });
+      }
+
+      if (!binding) {
+        binding = await getMicrosoftBinding(pupilId);
+      }
+
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
-      const exams = binding ? await listExamRecords(session.pupilId, { from, to }) : [];
+      const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
 
       return res.json({
         configured: true,
         bound: Boolean(binding),
         bindingStatusKnown: true,
         pupilResolved: true,
-        pupilId: session.pupilId,
+        pupilId,
         email: binding?.microsoftEmail ?? null,
         lastSyncAt: binding?.lastSyncAt ?? null,
         lastSyncStatus: binding?.lastSyncStatus ?? null,
