@@ -2,6 +2,8 @@ export type ExamFileKind = "attendance" | "classroom-change";
 
 export interface DownloadedGraphFile {
   id: string;
+  driveId: string;
+  driveName?: string;
   name: string;
   webUrl?: string;
   mimeType?: string;

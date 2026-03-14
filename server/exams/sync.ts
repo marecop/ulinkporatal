@@ -39,8 +39,12 @@ export async function syncExamData(params: {
   const matchedRecords = [];
   const roomChanges = [];
 
+  if (!fileItems.length) {
+    warnings.push("未在 SharePoint 文档库中找到 Attendence Sheet / Classroom Change 文件");
+  }
+
   for (const item of fileItems) {
-    const downloaded = await downloadGraphFile(params.accessToken, site.id, item);
+    const downloaded = await downloadGraphFile(params.accessToken, item);
     const sourceBase: ExamSourceFileInsert = {
       driveItemId: downloaded.id,
       fileName: downloaded.name,

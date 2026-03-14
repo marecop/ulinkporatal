@@ -4,6 +4,8 @@ export interface MicrosoftBindingStatus {
   microsoftConfigured?: boolean;
   tokenEncryptionConfigured?: boolean;
   bound: boolean;
+  bindingStatusKnown?: boolean;
+  pupilResolved?: boolean;
   pupilId?: string;
   email?: string | null;
   lastSyncAt?: string | null;

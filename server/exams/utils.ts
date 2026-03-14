@@ -37,6 +37,8 @@ const SESSION_HEADER_STOP_WORDS = [
   "homeroom",
   "invigilator",
   "note",
+  "room",
+  "classroom",
 ];
 
 export function collapseWhitespace(value: string) {
@@ -166,11 +168,15 @@ export function looksLikeSessionBoundary(text: string) {
 
 export function extractRoomFromText(text: string) {
   const normalized = collapseWhitespace(text);
-  const labeled = normalized.match(/room\s*:?\s*([A-Za-z]{1,5}\s*\d{1,4}[A-Za-z]?)/i);
+  const lowered = normalized.toLowerCase();
+  if (!normalized || lowered.includes("centre number")) return "";
+
+  const labeled = normalized.match(/room\s*[：:﹕]?\s*([A-Za-z]{1,5}\s*\d{1,4}[A-Za-z]?)/i);
   if (labeled?.[1]) return collapseWhitespace(labeled[1]).toUpperCase();
 
-  const codeMatch = normalized.match(/\b([A-Za-z]{1,5}\d{2,4}[A-Za-z]?)\b/);
-  if (codeMatch?.[1]) return codeMatch[1].toUpperCase();
+  if (/^[A-Za-z]{1,5}\s*\d{2,4}[A-Za-z]?$/.test(normalized)) {
+    return normalized.replace(/\s+/g, "").toUpperCase();
+  }
 
   return "";
 }
@@ -185,6 +191,8 @@ export function extractSubjectFromCells(cells: string[]) {
       if (extractDate(cell)) return false;
       if (extractTimeRange(cell)) return false;
       if (/^\d{3,4}\/\d{1,3}$/.test(cell)) return false;
+      const compact = cell.replace(/\s+/g, "");
+      if (/^(?=.*\d)[A-Z0-9+/.-]+$/.test(compact)) return false;
       if (/^[A-Z0-9+]+$/.test(cell) && cell.length > 6) return false;
       return true;
     });

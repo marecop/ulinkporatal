@@ -203,6 +203,8 @@ export default function Settings() {
                       ? "正在检查绑定状态"
                       : microsoftStatus?.bound
                         ? (microsoftStatus.email || "已绑定 Microsoft 账号")
+                        : microsoftStatus?.bindingStatusKnown === false
+                          ? "可绑定 Microsoft 账号"
                         : "未绑定 Microsoft 账号"}
                   </p>
                   <p className="text-[11px] leading-5" style={{ color: "var(--text-tertiary)" }}>
@@ -210,6 +212,8 @@ export default function Settings() {
                       ? "服务器尚未完成 Microsoft / 数据库配置。"
                       : microsoftStatus?.bound
                         ? `最近同步：${microsoftStatus.lastSyncAt ? new Date(microsoftStatus.lastSyncAt).toLocaleString("zh-CN") : "尚未同步"}${microsoftStatus.lastSyncMessage ? ` · ${microsoftStatus.lastSyncMessage}` : ""}`
+                        : microsoftStatus?.bindingStatusKnown === false
+                          ? "已登录门户，可直接开始绑定；学生身份会在首次授权或同步时自动确认。"
                         : "绑定后系统会通过 Microsoft Graph 读取 SharePoint 中的考试文件。"}
                   </p>
                 </div>
@@ -220,7 +224,7 @@ export default function Settings() {
                     color: microsoftStatus?.bound ? "var(--accent)" : "var(--text-secondary)",
                   }}
                 >
-                  {microsoftStatus?.bound ? "已绑定" : "未绑定"}
+                  {microsoftStatus?.bound ? "已绑定" : microsoftStatus?.bindingStatusKnown === false ? "可绑定" : "未绑定"}
                 </span>
               </div>
 

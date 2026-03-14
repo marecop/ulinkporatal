@@ -4,7 +4,8 @@ import type { ExamsResponse, SyncExamResponse } from "../types/exam";
 const EXAMS_CACHE_KEY = "examsData";
 const EXAMS_AUTO_SYNC_KEY = "examsAutoSyncAt";
 const AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
-const DEFAULT_FETCH_TIMEOUT_MS = 5000;
+const READ_FETCH_TIMEOUT_MS = 5000;
+const SYNC_FETCH_TIMEOUT_MS = 120000;
 
 function readCache() {
   try {
@@ -37,7 +38,7 @@ function markAutoSyncAttempt() {
   sessionStorage.setItem(EXAMS_AUTO_SYNC_KEY, String(Date.now()));
 }
 
-async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+async function fetchJsonWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -67,7 +68,7 @@ export function useExams(options?: { autoSync?: boolean }) {
       const response = await fetchJsonWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
-      });
+      }, SYNC_FETCH_TIMEOUT_MS);
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -78,7 +79,10 @@ export function useExams(options?: { autoSync?: boolean }) {
       markAutoSyncAttempt();
       return payload as SyncExamResponse;
     } catch (err: any) {
-      setError(err.message || "同步考试安排失败");
+      const message = err.name === "AbortError"
+        ? "同步考试安排超时，请稍后重试"
+        : (err.message || "同步考试安排失败");
+      setError(message);
       throw err;
     } finally {
       setSyncing(false);
@@ -98,7 +102,7 @@ export function useExams(options?: { autoSync?: boolean }) {
     }
 
     try {
-      const response = await fetchJsonWithTimeout("/api/exams", { credentials: "include" });
+      const response = await fetchJsonWithTimeout("/api/exams", { credentials: "include" }, READ_FETCH_TIMEOUT_MS);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

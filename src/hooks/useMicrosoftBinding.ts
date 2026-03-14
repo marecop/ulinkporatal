@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MicrosoftBindingStatus, SyncExamResponse } from "../types/exam";
 
-const DEFAULT_STATUS_TIMEOUT_MS = 5000;
+const STATUS_TIMEOUT_MS = 10000;
+const MUTATION_TIMEOUT_MS = 15000;
+const SYNC_TIMEOUT_MS = 120000;
 
-async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_STATUS_TIMEOUT_MS) {
+async function fetchJsonWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -29,7 +31,7 @@ export function useMicrosoftBinding() {
     setError(null);
 
     try {
-      const response = await fetchJsonWithTimeout("/api/microsoft/status", { credentials: "include" });
+      const response = await fetchJsonWithTimeout("/api/microsoft/status", { credentials: "include" }, STATUS_TIMEOUT_MS);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -52,7 +54,7 @@ export function useMicrosoftBinding() {
     const response = await fetchJsonWithTimeout("/api/microsoft/unbind", {
       method: "POST",
       credentials: "include",
-    });
+    }, MUTATION_TIMEOUT_MS);
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -72,7 +74,7 @@ export function useMicrosoftBinding() {
       const response = await fetchJsonWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
-      });
+      }, SYNC_TIMEOUT_MS);
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -84,7 +86,10 @@ export function useMicrosoftBinding() {
       await refresh();
       return payload as SyncExamResponse;
     } catch (err: any) {
-      setError(err.message || "同步考试安排失败");
+      const message = err.name === "AbortError"
+        ? "同步考试安排超时，请稍后重试"
+        : (err.message || "同步考试安排失败");
+      setError(message);
       throw err;
     } finally {
       setSyncing(false);

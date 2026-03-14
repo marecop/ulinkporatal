@@ -11,6 +11,8 @@ const SESSION_COOKIE_NAME = "portal_session";
 const OAUTH_STATE_COOKIE_NAME = "microsoft_oauth_state";
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+const PORTAL_REQUEST_TIMEOUT_MS = 15000;
+const LOGIN_PUPIL_WARMUP_TIMEOUT_MS = 4000;
 const SESSION_SECRET = process.env.SESSION_SECRET || "portal-session-secret-change-in-production";
 const isVercel = Boolean(process.env.VERCEL);
 const isProd = process.env.NODE_ENV === "production" || isVercel;
@@ -185,12 +187,13 @@ type PortalStudentDetails = Record<string, string> & {
   pupilId: string;
 };
 
-async function fetchPupilIdFromPortal(cookies: string) {
+async function fetchPupilIdFromPortal(cookies: string, timeoutMs = PORTAL_REQUEST_TIMEOUT_MS) {
   const response = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       "Cookie": cookies,
     },
+    timeout: timeoutMs,
     validateStatus: function (status) {
       return status >= 200 && status < 500;
     },
@@ -219,12 +222,13 @@ async function fetchPupilIdFromPortal(cookies: string) {
   throw new Error("Could not find pupil ID in HTML");
 }
 
-async function fetchStudentDetailsFromPortal(cookies: string): Promise<PortalStudentDetails> {
+async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL_REQUEST_TIMEOUT_MS): Promise<PortalStudentDetails> {
   const mainResponse = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       "Cookie": cookies,
     },
+    timeout: timeoutMs,
     validateStatus: function (status) {
       return status >= 200 && status < 500;
     },
@@ -251,6 +255,7 @@ async function fetchStudentDetailsFromPortal(cookies: string): Promise<PortalStu
       "Cookie": cookies,
       "Content-Type": "application/json; charset=utf-8",
     },
+    timeout: timeoutMs,
   });
 
   const detailsHtml = detailsResponse.data.d as string;
@@ -498,7 +503,8 @@ async function createApp() {
   });
 
   app.get("/api/microsoft/status", async (req, res) => {
-    if (!readSession(req)?.authCookies) {
+    const session = readSession(req);
+    if (!session?.authCookies) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
@@ -515,19 +521,38 @@ async function createApp() {
         microsoftConfigured,
         tokenEncryptionConfigured,
         bound: false,
+        bindingStatusKnown: false,
+        pupilResolved: Boolean(session.pupilId),
+      });
+    }
+
+    if (!session.pupilId) {
+      return res.json({
+        configured: true,
+        databaseConfigured,
+        microsoftConfigured,
+        tokenEncryptionConfigured,
+        bound: false,
+        bindingStatusKnown: false,
+        pupilResolved: false,
+        email: null,
+        lastSyncAt: null,
+        lastSyncStatus: null,
+        lastSyncMessage: null,
       });
     }
 
     try {
-      const pupilId = await ensurePupilId(req, res);
-      const binding = await getMicrosoftBinding(pupilId);
+      const binding = await getMicrosoftBinding(session.pupilId);
       return res.json({
         configured: true,
         databaseConfigured,
         microsoftConfigured,
         tokenEncryptionConfigured,
         bound: Boolean(binding),
-        pupilId,
+        bindingStatusKnown: true,
+        pupilResolved: true,
+        pupilId: session.pupilId,
         email: binding?.microsoftEmail ?? null,
         lastSyncAt: binding?.lastSyncAt ?? null,
         lastSyncStatus: binding?.lastSyncStatus ?? null,
@@ -551,7 +576,6 @@ async function createApp() {
     }
 
     try {
-      await ensurePupilId(req, res);
       const state = crypto.randomBytes(24).toString("base64url");
       writeOAuthState(res, state);
       return res.redirect(buildMicrosoftAuthorizeUrl(state));
@@ -589,7 +613,7 @@ async function createApp() {
     }
 
     try {
-      const pupilId = await ensurePupilId(req, res);
+      const pupilId = readSession(req)?.pupilId || await ensurePupilId(req, res);
       const tokenResponse = await exchangeAuthorizationCode(code);
       if (!tokenResponse.refreshToken) {
         throw new Error("Microsoft did not return a refresh token");
@@ -716,8 +740,15 @@ async function createApp() {
         ].filter(Boolean).join("; ");
 
         // Vercel-compatible session: store upstream cookies in a signed httpOnly cookie.
-        writeSession(res, { authCookies: allCookies });
-        return res.json({ success: true });
+        let pupilId: string | undefined;
+        try {
+          pupilId = await fetchPupilIdFromPortal(allCookies, LOGIN_PUPIL_WARMUP_TIMEOUT_MS);
+        } catch (error: any) {
+          console.warn("Pupil ID warm-up skipped:", error.message);
+        }
+
+        writeSession(res, { authCookies: allCookies, pupilId });
+        return res.json({ success: true, pupilIdResolved: Boolean(pupilId) });
       }
 
       // If we didn't get the expected redirect, login probably failed (e.g., wrong password)
@@ -1198,14 +1229,31 @@ async function createApp() {
     }
 
     try {
-      const pupilId = await ensurePupilId(req, res);
+      let pupilId = readSession(req)?.pupilId ?? "";
+      let studentDetails: PortalStudentDetails | null = null;
+
+      if (!pupilId) {
+        studentDetails = await fetchStudentDetailsFromPortal(cookies);
+        if (studentDetails.pupilId) {
+          pupilId = studentDetails.pupilId;
+          updateSession(res, req, { pupilId });
+        }
+      }
+
+      if (!pupilId) {
+        pupilId = await ensurePupilId(req, res);
+      }
+
       const binding = await getMicrosoftBinding(pupilId);
 
       if (!binding) {
         return res.status(409).json({ error: "Microsoft account is not bound" });
       }
 
-      const studentDetails = await fetchStudentDetailsFromPortal(cookies);
+      if (!studentDetails) {
+        studentDetails = await fetchStudentDetailsFromPortal(cookies);
+      }
+
       if (studentDetails.pupilId) {
         updateSession(res, req, { pupilId: studentDetails.pupilId });
       }
@@ -1241,7 +1289,8 @@ async function createApp() {
   });
 
   app.get("/api/exams", async (req, res) => {
-    if (!readSession(req)?.authCookies) {
+    const session = readSession(req);
+    if (!session?.authCookies) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
@@ -1255,6 +1304,25 @@ async function createApp() {
       return res.json({
         configured: false,
         bound: false,
+        bindingStatusKnown: false,
+        pupilResolved: Boolean(session.pupilId),
+        exams: [],
+        databaseConfigured,
+        microsoftConfigured,
+        tokenEncryptionConfigured,
+      });
+    }
+
+    if (!session.pupilId) {
+      return res.json({
+        configured: true,
+        bound: false,
+        bindingStatusKnown: false,
+        pupilResolved: false,
+        email: null,
+        lastSyncAt: null,
+        lastSyncStatus: null,
+        lastSyncMessage: null,
         exams: [],
         databaseConfigured,
         microsoftConfigured,
@@ -1263,15 +1331,17 @@ async function createApp() {
     }
 
     try {
-      const pupilId = await ensurePupilId(req, res);
-      const binding = await getMicrosoftBinding(pupilId);
+      const binding = await getMicrosoftBinding(session.pupilId);
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
-      const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+      const exams = binding ? await listExamRecords(session.pupilId, { from, to }) : [];
 
       return res.json({
         configured: true,
         bound: Boolean(binding),
+        bindingStatusKnown: true,
+        pupilResolved: true,
+        pupilId: session.pupilId,
         email: binding?.microsoftEmail ?? null,
         lastSyncAt: binding?.lastSyncAt ?? null,
         lastSyncStatus: binding?.lastSyncStatus ?? null,

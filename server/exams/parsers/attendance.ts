@@ -107,6 +107,9 @@ function buildSessionFromBlock(
     const rowText = collapseWhitespace(row.join(" "));
     if (!rowText) continue;
     rawLines.push(rowText);
+    const loweredRow = rowText.toLowerCase();
+    const hasDate = Boolean(extractDate(rowText));
+    const hasTimeRange = Boolean(extractTimeRange(rowText));
 
     if (!examDate) {
       examDate = extractDate(rowText) ?? "";
@@ -120,11 +123,18 @@ function buildSessionFromBlock(
       }
     }
 
-    if (!room) {
+    if (!room && loweredRow.includes("room")) {
       room = extractRoomFromText(rowText);
     }
 
-    const subjectCandidate = extractSubjectFromCells(row);
+    const shouldSkipSubjectExtraction = loweredRow.includes("centre number")
+      || loweredRow.includes("actual start time")
+      || loweredRow.startsWith("note")
+      || hasDate
+      || hasTimeRange
+      || loweredRow.includes("room");
+
+    const subjectCandidate = shouldSkipSubjectExtraction ? "" : extractSubjectFromCells(row);
     if (subjectCandidate) {
       subjectCandidates.push(subjectCandidate);
     }
