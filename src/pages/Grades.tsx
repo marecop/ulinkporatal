@@ -187,10 +187,10 @@ export default function Grades() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pupilId, setPupilId] = useState('');
-
+  
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState('');
-
+  
   const [reportingPeriods, setReportingPeriods] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [loadingPeriods, setLoadingPeriods] = useState(false);
@@ -251,7 +251,7 @@ export default function Grades() {
   }, []);
 
   useEffect(() => {
-    if (!selectedYear) return;
+      if (!selectedYear) return;
     const ctrl = new AbortController();
     const { signal } = ctrl;
 
@@ -280,16 +280,16 @@ export default function Grades() {
   }, [selectedYear]);
 
   useEffect(() => {
-    if (!selectedYear || !selectedPeriod || !pupilId) return;
+      if (!selectedYear || !selectedPeriod || !pupilId) return;
     if (!selectedPeriod.includes(selectedYear)) return;
-
+      
     const ctrl = new AbortController();
     const { signal } = ctrl;
 
     (async () => {
       try {
         setLoadingMarksheet(true);
-        setError(null);
+        setError(null); 
 
         const periodShort = selectedPeriod.split('|').pop() || selectedPeriod;
 
@@ -315,11 +315,11 @@ export default function Grades() {
           try {
             const colsRes = await fetchApi('GetColumnsForSubjects', {
               Text: '', NumberOfItems: 0,
-              academicYears: selectedYear,
-              reportingPeriods: selectedPeriod,
-              yearGroupList: yearGroup,
-              subjectList: subjectList,
-              divisionList: divisionList,
+            academicYears: selectedYear, 
+            reportingPeriods: selectedPeriod, 
+            yearGroupList: yearGroup, 
+            subjectList: subjectList, 
+            divisionList: divisionList, 
               batchList: batchList,
             }, signal);
             if (signal.aborted) return;
@@ -332,26 +332,26 @@ export default function Grades() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            academicYear: selectedYear,
-            reportingPeriodList: selectedPeriod,
-            yearGroupList: yearGroup,
-            subjectList: subjectList,
-            divisionList: divisionList,
-            batchList: batchList,
-            columnList: columnList,
-            pupilIDs: pupilId,
+          academicYear: selectedYear,
+          reportingPeriodList: selectedPeriod,
+          yearGroupList: yearGroup,
+          subjectList: subjectList,
+          divisionList: divisionList,
+          batchList: batchList,
+          columnList: columnList,
+          pupilIDs: pupilId,
             uniqueID: 'Portal_PupilDetails',
-            setAsPreference: true,
+          setAsPreference: true,
             defaultReportingPeriod: '',
             pageIndex: '0',
             sortField: 'Surname',
             sortDirection: 'ASC',
-            sortable: true,
-            showPupilName: false,
+          sortable: true,
+          showPupilName: false,
             allowCollapseMarksheetColumns: 'true',
-            enableFrozenHeadings: false,
-            filterSearch: true,
-            page: 1,
+          enableFrozenHeadings: false,
+          filterSearch: true,
+          page: 1,
             pageSize: 500,
           }),
           signal,
@@ -377,7 +377,7 @@ export default function Grades() {
         if (!signal.aborted) setLoadingMarksheet(false);
       }
     })();
-
+    
     return () => ctrl.abort();
   }, [selectedPeriod, selectedYear, pupilId, showDetails]);
 
@@ -418,7 +418,7 @@ export default function Grades() {
         {/* Header */}
         <StaggerItem>
           <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div>
+          <div>
               <h1 className="text-[32px] leading-tight font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>成绩</h1>
               <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>您的学术表现和评估。</p>
             </div>
@@ -521,7 +521,7 @@ function FilterSelect({ value, onChange, disabled, options }: {
         {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
-      </select>
+            </select>
       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "var(--text-tertiary)" }} />
     </div>
   );
@@ -577,8 +577,8 @@ function CardView({ marksheet }: { marksheet: ParsedMarksheet }) {
                     <span className="flex items-center gap-1"><User className="w-3 h-3" />{sub.teacher}</span>
                   )}
                   {sub.clazz && <span>{sub.clazz}</span>}
-                </div>
-              </div>
+          </div>
+        </div>
 
               <div className="flex flex-wrap items-start gap-2 flex-shrink-0">
                 {displayColumns.map(col => {
@@ -717,10 +717,10 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
                             >
                               <span className={`flex-shrink-0 inline-flex items-center justify-center min-w-[40px] h-[34px] px-2.5 rounded-lg text-[14px] font-bold tabular-nums ${colors.bg} ${colors.text} ${colors.ring}`}>
                                 {cell.value}
-                              </span>
+                                </span>
                               <span className="text-[12px] leading-tight break-words whitespace-normal min-w-0 flex-1" style={{ color: "var(--text-secondary)" }}>
                                 {col}
-                              </span>
+                                </span>
                             </motion.div>
                           );
                         })}
@@ -737,8 +737,8 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
               </div>
             )}
           </motion.div>
-        );
-      })}
+                    );
+                  })}
 
       {Object.keys(marksheet.footerAverages).length > 0 && (
         <motion.div
@@ -754,11 +754,11 @@ function DetailedView({ marksheet }: { marksheet: ParsedMarksheet }) {
               <div key={col} className="flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 min-w-0 max-w-[280px]" style={{ background: "var(--bg-primary)", boxShadow: "var(--card-shadow)" }}>
                 <span className="text-[13px] font-bold tabular-nums flex-shrink-0" style={{ color: "var(--text-primary)" }}>{val}</span>
                 <span className="text-[10px] break-words whitespace-normal min-w-0" style={{ color: "var(--text-tertiary)" }}>{col}</span>
-              </div>
+            </div>
             ))}
           </div>
         </motion.div>
-      )}
-    </div>
+        )}
+      </div>
   );
 }
