@@ -1,5 +1,5 @@
-import type { ExamSession, MatchedExamRecord, RoomChangeRecord } from "./types.ts";
-import { normalizeName, normalizeSubject } from "./utils.ts";
+import type { ExamSession, MatchedExamRecord, RoomChangeRecord } from "./types.js";
+import { normalizeName, normalizeSubject } from "./utils.js";
 
 function normalizeRoom(room: string) {
   return room.trim().toUpperCase();

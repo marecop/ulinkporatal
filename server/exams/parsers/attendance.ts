@@ -1,4 +1,4 @@
-import type { DownloadedGraphFile, ExamSession, ParsedAttendanceResult, ParsedStudentRow } from "../types.ts";
+import type { DownloadedGraphFile, ExamSession, ParsedAttendanceResult, ParsedStudentRow } from "../types.js";
 import {
   cleanCells,
   collapseWhitespace,
@@ -12,7 +12,7 @@ import {
   looksLikeSessionBoundary,
   looksLikeStudentHeader,
   splitTabularLine,
-} from "../utils.ts";
+} from "../utils.js";
 
 type HeaderMap = {
   seatNumber?: number;

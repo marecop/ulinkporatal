@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { DownloadedGraphFile, ExamFileKind } from "../exams/types.ts";
+import type { DownloadedGraphFile, ExamFileKind } from "../exams/types.js";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const SHAREPOINT_HOST = "guischina.sharepoint.com";

@@ -1,4 +1,4 @@
-import type { DownloadedGraphFile, ParsedClassroomChangeResult, RoomChangeRecord } from "../types.ts";
+import type { DownloadedGraphFile, ParsedClassroomChangeResult, RoomChangeRecord } from "../types.js";
 import {
   cleanCells,
   collapseWhitespace,
@@ -9,7 +9,7 @@ import {
   extractTimeRange,
   looksLikeFooter,
   splitTabularLine,
-} from "../utils.ts";
+} from "../utils.js";
 
 type ChangeHeaderMap = {
   subject?: number;

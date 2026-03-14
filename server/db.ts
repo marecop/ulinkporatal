@@ -1,5 +1,5 @@
 import { Pool, type PoolClient, type PoolConfig } from "pg";
-import type { ExamFileKind, MatchedExamRecord } from "./exams/types.ts";
+import type { ExamFileKind, MatchedExamRecord } from "./exams/types.js";
 
 export interface MicrosoftBindingRow {
   pupilId: string;

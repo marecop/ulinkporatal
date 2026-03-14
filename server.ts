@@ -12,14 +12,14 @@ import {
   listExamRecords,
   updateMicrosoftBindingSyncStatus,
   upsertMicrosoftBinding,
-} from "./server/db.ts";
+} from "./server/db.js";
 import {
   buildMicrosoftAuthorizeUrl,
   exchangeAuthorizationCode,
   fetchMicrosoftUser,
   isMicrosoftConfigured,
   refreshMicrosoftAccessToken,
-} from "./server/microsoft/oauth.ts";
+} from "./server/microsoft/oauth.js";
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = "portal_session";
@@ -1256,7 +1256,7 @@ async function createApp() {
       }
 
       const accessToken = await getMicrosoftAccessTokenForPupil(pupilId);
-      const { syncExamData } = await import("./server/exams/sync.ts");
+      const { syncExamData } = await import("./server/exams/sync.js");
       const syncResult = await syncExamData({
         pupilId,
         middleName: studentDetails.middleName,

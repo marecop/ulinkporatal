@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
-import { replaceExamData, updateMicrosoftBindingSyncStatus, type ExamSourceFileInsert } from "../db.ts";
-import { downloadGraphFile, resolveSharePointSite, searchExamFiles } from "../microsoft/graph.ts";
-import { applyClassroomChanges, buildMatchedExamRecords, dedupeExamRecords } from "./matcher.ts";
-import { parseAttendanceFile } from "./parsers/attendance.ts";
-import { parseClassroomChangeFile } from "./parsers/classroomChange.ts";
+import { replaceExamData, updateMicrosoftBindingSyncStatus, type ExamSourceFileInsert } from "../db.js";
+import { downloadGraphFile, resolveSharePointSite, searchExamFiles } from "../microsoft/graph.js";
+import { applyClassroomChanges, buildMatchedExamRecords, dedupeExamRecords } from "./matcher.js";
+import { parseAttendanceFile } from "./parsers/attendance.js";
+import { parseClassroomChangeFile } from "./parsers/classroomChange.js";
 
 export interface SyncExamDataResult {
   siteId: string;
