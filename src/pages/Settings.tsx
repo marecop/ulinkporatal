@@ -232,7 +232,7 @@ export default function Settings() {
 
               <div className="flex flex-wrap gap-2">
                 {!microsoftStatus?.bound ? (
-                  <ActionButton icon={Link2} onClick={handleMicrosoftConnect} disabled={microsoftLoading || !microsoftStatus?.configured}>
+                  <ActionButton icon={Link2} onClick={handleMicrosoftConnect} disabled={microsoftLoading}>
                     绑定 Microsoft 账号
                   </ActionButton>
                 ) : (

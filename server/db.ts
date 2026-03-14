@@ -57,6 +57,10 @@ function getPoolConfig(databaseUrl: string): PoolConfig {
   return {
     connectionString: databaseUrl,
     ssl: useSsl(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    connectionTimeoutMillis: 5000,
+    query_timeout: 8000,
+    statement_timeout: 8000,
+    idleTimeoutMillis: 30000,
   };
 }
 

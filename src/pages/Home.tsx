@@ -41,7 +41,7 @@ export default function Home() {
   const [todayClasses, setTodayClasses] = useState<Lesson[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [classesError, setClassesError] = useState("");
-  const { data: examsData, loading: examsLoading, error: examsError } = useExams({ autoSync: true });
+  const { data: examsData } = useExams({ autoSync: false });
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -85,8 +85,8 @@ export default function Home() {
   }, []);
 
   const todayTimeline = buildTodayTimeline(todayClasses, examsData?.exams ?? []);
-  const isLoadingSchedule = isLoadingClasses || (examsLoading && !examsData);
-  const scheduleError = classesError || (!todayTimeline.length ? examsError ?? "" : "");
+  const isLoadingSchedule = isLoadingClasses;
+  const scheduleError = classesError;
 
   return (
     <PageTransition>

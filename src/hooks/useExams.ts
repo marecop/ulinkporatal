@@ -4,6 +4,7 @@ import type { ExamsResponse, SyncExamResponse } from "../types/exam";
 const EXAMS_CACHE_KEY = "examsData";
 const EXAMS_AUTO_SYNC_KEY = "examsAutoSyncAt";
 const AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
+const DEFAULT_FETCH_TIMEOUT_MS = 5000;
 
 function readCache() {
   try {
@@ -36,6 +37,21 @@ function markAutoSyncAttempt() {
   sessionStorage.setItem(EXAMS_AUTO_SYNC_KEY, String(Date.now()));
 }
 
+async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export function useExams(options?: { autoSync?: boolean }) {
   const autoSync = options?.autoSync ?? false;
   const [data, setData] = useState<ExamsResponse | null>(null);
@@ -48,7 +64,7 @@ export function useExams(options?: { autoSync?: boolean }) {
     setError(null);
 
     try {
-      const response = await fetch("/api/exams/sync", {
+      const response = await fetchJsonWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
       });
@@ -82,7 +98,7 @@ export function useExams(options?: { autoSync?: boolean }) {
     }
 
     try {
-      const response = await fetch("/api/exams", { credentials: "include" });
+      const response = await fetchJsonWithTimeout("/api/exams", { credentials: "include" });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -99,7 +115,10 @@ export function useExams(options?: { autoSync?: boolean }) {
 
       return payload;
     } catch (err: any) {
-      setError(err.message || "无法加载考试安排");
+      const message = err.name === "AbortError"
+        ? "考试安排请求超时"
+        : (err.message || "无法加载考试安排");
+      setError(message);
       return null;
     } finally {
       setLoading(false);

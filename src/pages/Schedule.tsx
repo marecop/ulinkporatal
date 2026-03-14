@@ -40,7 +40,7 @@ export default function Schedule() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const todayIndex = new Date().getDay() - 1;
   const [selectedDay, setSelectedDay] = useState(todayIndex >= 0 && todayIndex < 5 ? days[todayIndex] : 'Monday');
-  const { data: examsData, loading: examsLoading, error: examsError } = useExams({ autoSync: true });
+  const { data: examsData } = useExams({ autoSync: false });
 
   useEffect(() => {
     const fetchTimetable = async () => {
@@ -61,8 +61,8 @@ export default function Schedule() {
 
   const dayTimeline = buildDayTimeline(lessons, examsData?.exams ?? [], selectedDay);
   const dayMap: Record<string, string> = { Monday: '周一', Tuesday: '周二', Wednesday: '周三', Thursday: '周四', Friday: '周五' };
-  const isLoadingTimeline = isLoading || (examsLoading && !examsData);
-  const timelineError = error || (!dayTimeline.length ? examsError ?? "" : "");
+  const isLoadingTimeline = isLoading;
+  const timelineError = error;
 
   return (
     <PageTransition>

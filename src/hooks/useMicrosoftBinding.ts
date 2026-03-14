@@ -1,6 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MicrosoftBindingStatus, SyncExamResponse } from "../types/exam";
 
+const DEFAULT_STATUS_TIMEOUT_MS = 5000;
+
+async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_STATUS_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export function useMicrosoftBinding() {
   const [status, setStatus] = useState<MicrosoftBindingStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -12,7 +29,7 @@ export function useMicrosoftBinding() {
     setError(null);
 
     try {
-      const response = await fetch("/api/microsoft/status", { credentials: "include" });
+      const response = await fetchJsonWithTimeout("/api/microsoft/status", { credentials: "include" });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -20,7 +37,10 @@ export function useMicrosoftBinding() {
       setStatus(data);
       return data;
     } catch (err: any) {
-      setError(err.message || "无法加载 Microsoft 绑定状态");
+      const message = err.name === "AbortError"
+        ? "Microsoft 绑定状态请求超时"
+        : (err.message || "无法加载 Microsoft 绑定状态");
+      setError(message);
       return null;
     } finally {
       setLoading(false);
@@ -29,7 +49,7 @@ export function useMicrosoftBinding() {
 
   const unbind = useCallback(async () => {
     setError(null);
-    const response = await fetch("/api/microsoft/unbind", {
+    const response = await fetchJsonWithTimeout("/api/microsoft/unbind", {
       method: "POST",
       credentials: "include",
     });
@@ -49,7 +69,7 @@ export function useMicrosoftBinding() {
     setError(null);
 
     try {
-      const response = await fetch("/api/exams/sync", {
+      const response = await fetchJsonWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
       });
