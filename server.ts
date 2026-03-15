@@ -1420,8 +1420,50 @@ async function createApp() {
 
     try {
       let pupilId = session.pupilId ?? "";
-      let binding = databaseConfigured && pupilId ? await getMicrosoftBinding(pupilId) : null;
+      let binding = null;
       let studentDetails: PortalStudentDetails | null = null;
+      const baseUrl = getRequestOrigin(req);
+
+      const respondWithDirectFallback = async (reason: string, bindingStatusKnown: boolean) => {
+        if (!studentDetails?.middleName) {
+          return false;
+        }
+
+        const fallback = await getTemporaryFallbackExamRecords({
+          baseUrl,
+          middleName: studentDetails.middleName,
+          today,
+        });
+
+        if (!fallback.active) {
+          return false;
+        }
+
+        console.warn("Exam DB fallback triggered:", reason);
+        return res.json({
+          configured: fullyConfigured,
+          bound: false,
+          bindingStatusKnown,
+          pupilResolved: Boolean(pupilId),
+          pupilId: pupilId || undefined,
+          email: null,
+          lastSyncAt: null,
+          lastSyncStatus: "degraded",
+          lastSyncMessage: `数据库暂时不可用，已直接读取本地 Mock Exam 文件（有效至 ${fallback.cutoffDate}）`,
+          exams: fallback.exams,
+          databaseConfigured,
+          microsoftConfigured,
+          tokenEncryptionConfigured,
+        });
+      };
+
+      if (databaseConfigured && pupilId) {
+        try {
+          binding = await getMicrosoftBinding(pupilId);
+        } catch (error: any) {
+          console.error("Exam binding lookup failed:", error.message);
+        }
+      }
 
       if (!binding) {
         studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
@@ -1431,36 +1473,44 @@ async function createApp() {
         }
 
         if (databaseConfigured && pupilId && studentDetails.middleName) {
-          await ensureTemporaryFallbackExamData({
-            baseUrl: getRequestOrigin(req),
-            pupilId,
-            middleName: studentDetails.middleName,
-            today,
-          });
+          try {
+            await ensureTemporaryFallbackExamData({
+              baseUrl,
+              pupilId,
+              middleName: studentDetails.middleName,
+              today,
+            });
 
-          const state = await getExamScheduleState(pupilId);
-          const exams = await listExamRecords(pupilId, { from, to });
+            const state = await getExamScheduleState(pupilId);
+            const exams = await listExamRecords(pupilId, { from, to });
 
-          return res.json({
-            configured: fullyConfigured,
-            bound: false,
-            bindingStatusKnown: true,
-            pupilResolved: Boolean(pupilId),
-            pupilId: pupilId || undefined,
-            email: null,
-            lastSyncAt: state?.lastRefreshAt ?? null,
-            lastSyncStatus: state?.lastRefreshStatus ?? null,
-            lastSyncMessage: state?.lastRefreshMessage ?? `当前使用本地 Mock Exam 文件（有效至 2026-03-24）`,
-            exams,
-            databaseConfigured,
-            microsoftConfigured,
-            tokenEncryptionConfigured,
-          });
+            return res.json({
+              configured: fullyConfigured,
+              bound: false,
+              bindingStatusKnown: true,
+              pupilResolved: Boolean(pupilId),
+              pupilId: pupilId || undefined,
+              email: null,
+              lastSyncAt: state?.lastRefreshAt ?? null,
+              lastSyncStatus: state?.lastRefreshStatus ?? null,
+              lastSyncMessage: state?.lastRefreshMessage ?? `当前使用本地 Mock Exam 文件（有效至 2026-03-24）`,
+              exams,
+              databaseConfigured,
+              microsoftConfigured,
+              tokenEncryptionConfigured,
+            });
+          } catch (error: any) {
+            const fallbackResponse = await respondWithDirectFallback(error.message || "exam-database-unavailable", true);
+            if (fallbackResponse) {
+              return fallbackResponse;
+            }
+            throw error;
+          }
         }
 
         if (studentDetails.middleName) {
           const fallback = await getTemporaryFallbackExamRecords({
-            baseUrl: getRequestOrigin(req),
+            baseUrl,
             middleName: studentDetails.middleName,
             today,
           });
@@ -1517,10 +1567,45 @@ async function createApp() {
       }
 
       if (!binding) {
-        binding = await getMicrosoftBinding(pupilId);
+        try {
+          binding = await getMicrosoftBinding(pupilId);
+        } catch (error: any) {
+          console.error("Exam binding reload failed:", error.message);
+          if (!studentDetails) {
+            studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
+            if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+              pupilId = studentDetails.pupilId;
+              updateSession(res, req, { pupilId });
+            }
+          }
+
+          const fallbackResponse = await respondWithDirectFallback(error.message || "exam-binding-reload-failed", false);
+          if (fallbackResponse) {
+            return fallbackResponse;
+          }
+          throw error;
+        }
       }
 
-      const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+      let exams = [];
+      try {
+        exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+      } catch (error: any) {
+        console.error("Exam records query failed:", error.message);
+        if (!studentDetails) {
+          studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
+          if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+            pupilId = studentDetails.pupilId;
+            updateSession(res, req, { pupilId });
+          }
+        }
+
+        const fallbackResponse = await respondWithDirectFallback(error.message || "exam-records-query-failed", Boolean(binding));
+        if (fallbackResponse) {
+          return fallbackResponse;
+        }
+        throw error;
+      }
 
       return res.json({
         configured: fullyConfigured,
@@ -1535,6 +1620,7 @@ async function createApp() {
         exams,
       });
     } catch (error: any) {
+      console.error("Exams route error:", error.message);
       return res.status(500).json({ error: error.message || "Failed to load exams" });
     }
   });
