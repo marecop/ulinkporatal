@@ -227,7 +227,7 @@ export default function Sidebar() {
             whileHover={{ scale: 1.08, rotate: 5 }}
             transition={{ type: "spring", stiffness: 400, damping: 15 }}
           >
-            <img src="/logo_ulc.png" alt="ULC" className="w-7 h-7 object-contain relative z-10" />
+            <img src={`${import.meta.env.BASE_URL}logo_ulc.png`} alt="ULC" className="w-7 h-7 object-contain relative z-10" />
           </motion.div>
           <span className="text-[16px] font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>
             Student Portal
@@ -438,7 +438,7 @@ export default function Sidebar() {
               <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "#2E5CA8" }}>
-                    <img src="/logo_ulc.png" alt="ULC" className="w-5 h-5 object-contain" />
+                    <img src={`${import.meta.env.BASE_URL}logo_ulc.png`} alt="ULC" className="w-5 h-5 object-contain" />
                   </div>
                   <span className="font-semibold text-[15px]" style={{ color: "var(--text-primary)" }}>
                     Student Portal
