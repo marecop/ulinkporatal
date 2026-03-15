@@ -265,7 +265,7 @@ export default function Login() {
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <img src="/logo_ulc.png" alt="ULC" className="w-12 h-12 object-contain relative z-10" />
+            <img src={`${import.meta.env.BASE_URL}logo_ulc.png`} alt="ULC" className="w-12 h-12 object-contain relative z-10" />
             <motion.div
               className="absolute inset-0 rounded-2xl"
               style={{ background: "#2E5CA8", opacity: 0.4 }}

@@ -8,7 +8,7 @@
 
 # ULink College Student Portal New
 欢迎大家，我是Flaps1+F，这里是马库斯伊兰姆公司发布的第一个软件产品：Student Portal New - SPN。
-目前网页版的正式版本：`v1.2.0`（未来计划整一个手机app应用） *如果你有遇到任何问题，请你联系zhahuang2868@guiscn.com，或者直接在本页提交issues。*
+目前网页版的正式版本：`v1.2.1`（未来计划整一个手机app应用） *如果你有遇到任何问题，请你联系zhahuang2868@guiscn.com，或者直接在本页提交issues。*
 
 ## 关于项目
 ### 原网页的问题

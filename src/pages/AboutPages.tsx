@@ -396,6 +396,13 @@ export const AboutApp = () => (
       ]}
     />
     <SectionCard
+      title="v1.2.0正式版本"
+      paragraphs={[
+        "时间：2026.3.15",
+        "更新内容：补上了正式发布前最后一轮完善工作：新增版本号显示、登录后的更新提示弹窗、README 整理，并修复了考试同步、缓存隔离与若干安全细节。",
+      ]}
+    />
+    <SectionCard
       title={CURRENT_RELEASE.aboutTitle}
       paragraphs={CURRENT_RELEASE.aboutParagraphs}
     />
