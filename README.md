@@ -1,19 +1,18 @@
 <div align="center">
 <a href="https://portal.flaps1f.com/">
   <img width="1200" height="475"
-       alt="GHBanner"
+       alt="SPN"
        src="https://www.ulinkcollege.com/img/logo.png">
 </a>
 </div>
 
 # ULink College Student Portal New
-欢迎大家，我是 Flaps1+F。这个项目本质上就是把 ULink College 原本那个很老、很丑、而且移动端体验非常一般的 Engage 学生门户，重新做了一层现代化前端壳。数据来源还是学校原系统和 SharePoint，但界面、交互、速度和可读性都重做了。
+欢迎大家，这里是马库斯伊兰姆公司发布的第一个软件产品：Student Portal New - SPN。
+目前网页版的正式版本：`v1.2.0`（未来计划整一个手机app应用）
 
-目前正式版本：`v1.2.0`
-
-## 这项目到底干了什么
+## 关于项目
 ### 原网页的问题
-学校这套系统本体还是 ASP.NET WebForms，页面还在用 `.aspx`，接口还在用 `.asmx`。这东西现在还能在生产环境里大规模跑，说实话已经是时代遗迹了。界面风格也非常老，移动端体验更是一言难尽。
+学校这套系统本体是 ASP.NET WebForms，页面还在用 `.aspx`，接口还在用 `.asmx`。其实没问题，有问题的是学生端很丑，我就想看看能不能重新换壳。
 
 ### 这个项目的思路
 思路其实不复杂：保留原始数据来源，不碰学校账号体系，然后在前端和服务端之间自己做一层整合。前端用 React + Vite 重构页面，后端用 Express 代理 Engage / Microsoft Graph 请求，再把考试数据做解析和缓存。
@@ -38,7 +37,7 @@
 考试模块是这个版本里比较重要的一部分。
 
 - 未绑定 Microsoft 时，可以读取部署在站点上的本地 Mock Exam 样本文件
-- 已绑定 Microsoft 时，可以从 SharePoint / Microsoft Graph 搜索考试相关文件并同步到数据库
+- 已绑定 Microsoft 时，可以从 SharePoint / Microsoft Graph 自动搜索考试相关文件并同步到数据库
 - 系统会按学生 `middleName` 匹配当前用户自己的考试记录
 - 支持解析考试时间、试卷名称、房间，以及 Full Centre Supervision 全面监管信息
 - 解析后的结果会写入 PostgreSQL，页面优先直接读数据库，不会每次都重新扒文件
@@ -88,7 +87,7 @@ npm run start
 - 页面显示的数据原则上来自学校官方 Engage / SharePoint
 - 密码不会持久化保存到数据库
 - Microsoft token 会在服务端加密后再落库
-- 考试结果仅供辅助查看，最终请以学校正式通知为准
+- 成绩查询是真的能查到你成绩。
 
 ## 更新日志入口
 应用内可前往 `关于 -> 更新日志` 查看当前版本变更。
