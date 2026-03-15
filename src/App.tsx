@@ -10,13 +10,37 @@ import Activities from "./pages/Activities";
 import Settings from "./pages/Settings";
 import GenericPage from "./pages/GenericPage";
 import ExamSchedule from "./pages/ExamSchedule";
-import { Target, FileText, MessageSquare, ShieldAlert, Book } from "lucide-react";
+import { TechSpecs, LegalNotice, PrivacyPolicy, AboutApp } from "./pages/AboutPages";
+import { FileText, MessageSquare, Book, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+const PublicPrivacy = () => {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen noise-overlay" style={{ background: "var(--bg-secondary)" }}>
+      <div className="max-w-4xl mx-auto p-8">
+        <button 
+          onClick={() => navigate(-1)}
+          className="mb-8 flex items-center gap-2 text-[14px] font-medium transition-colors hover:text-[var(--accent)]"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          返回
+        </button>
+        <div className="glass rounded-3xl p-8" style={{ borderColor: "var(--border)" }}>
+          <PrivacyPolicy />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/privacy" element={<PublicPrivacy />} />
         
         <Route element={<Layout />}>
           <Route path="/home" element={<Home />} />
@@ -28,12 +52,16 @@ export default function App() {
           <Route path="/activities" element={<Activities />} />
           <Route path="/settings" element={<Settings />} />
           
-          <Route path="/scores" element={<GenericPage title="分数" description="查看您的各项作业和考试分数" icon={Target} />} />
           <Route path="/reports" element={<GenericPage title="成绩报告" description="查看和下载您的官方成绩单" icon={FileText} />} />
           <Route path="/extra" element={<Navigate to="/exams" replace />} />
           <Route path="/comments" element={<GenericPage title="我的报告评论" description="查看导师对您的评价" icon={MessageSquare} />} />
-          <Route path="/dms" element={<GenericPage title="我的DMS" description="直接消息与通知系统" icon={ShieldAlert} />} />
           <Route path="/diary" element={<GenericPage title="日记簿" description="个人学习日志与记录" icon={Book} />} />
+
+          {/* About Pages */}
+          <Route path="/about/tech" element={<TechSpecs />} />
+          <Route path="/about/legal" element={<LegalNotice />} />
+          <Route path="/about/privacy" element={<PrivacyPolicy />} />
+          <Route path="/about/app" element={<AboutApp />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

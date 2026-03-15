@@ -200,7 +200,7 @@ export default function Login() {
 
   return (
     <div
-      className="noise-overlay min-h-screen w-full flex items-center justify-center relative overflow-hidden"
+      className="noise-overlay min-h-screen w-full flex items-center justify-center relative overflow-hidden px-4 sm:px-6"
       style={{
         background: isDark
           ? "radial-gradient(ellipse at 50% 0%, rgba(46,92,168,0.10) 0%, rgba(10,10,12,1) 60%)"
@@ -229,7 +229,7 @@ export default function Login() {
           : { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }
         }
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-[400px] p-8 rounded-3xl z-10 glass"
+        className="relative w-full max-w-[400px] p-6 sm:p-8 rounded-3xl z-10 glass"
         style={{
           boxShadow: isDark
             ? "0 8px 40px rgba(0,0,0,0.4), 0 0 80px rgba(46,92,168,0.06)"
@@ -355,6 +355,23 @@ export default function Login() {
             )}
           </motion.button>
         </form>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8, duration: 0.5 }}
+        className="absolute bottom-6 left-6 z-20"
+      >
+        <button
+          onClick={() => navigate("/privacy")}
+          className="text-[13px] font-medium transition-colors duration-200"
+          style={{ color: "var(--text-tertiary)" }}
+          onMouseEnter={(e) => e.currentTarget.style.color = "var(--accent)"}
+          onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-tertiary)"}
+        >
+          隐私政策
+        </button>
       </motion.div>
     </div>
   );

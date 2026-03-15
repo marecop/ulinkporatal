@@ -77,7 +77,7 @@ export default function Layout() {
 
       <Sidebar />
       <main className="flex-1 h-full overflow-y-auto relative z-10">
-        <div className="max-w-5xl mx-auto p-8 md:p-12">
+        <div className="max-w-5xl mx-auto p-4 pb-24 md:p-12">
           <AnimatePresence mode="wait" initial={false}>
             <div key={location.pathname}>
               <Outlet />
