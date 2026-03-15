@@ -41,7 +41,7 @@ const navItems = [
       { name: "技术说明", path: "/about/tech" },
       { name: "法律声明", path: "/about/legal" },
       { name: "隐私政策", path: "/about/privacy" },
-      { name: "关于程序", path: "/about/app" },
+      { name: "更新日志", path: "/about/app" },
     ]
   }
 ] satisfies NavItem[];
