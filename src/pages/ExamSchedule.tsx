@@ -54,7 +54,7 @@ export default function ExamSchedule() {
                 </div>
                 <div>
                   <p className="text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {data?.bound ? "考试资料已接入账户数据" : "考试资料当前来自本地 Mock Exam 样本"}
+                    {data?.bound ? "考试资料已接入账户数据" : "考试资料来自Sharepoint。"}
                   </p>
                   <p className="text-[12px] leading-5 mt-1" style={{ color: "var(--text-secondary)" }}>
                     {data?.lastSyncMessage || "系统会在每日首次登录时重新解析考试文件，并从数据库读取页面内容。"}
