@@ -99,7 +99,7 @@ export default function Home() {
             主页
           </h1>
           <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>
-            欢迎回来，这是您今天的概览
+            欢迎回来，这是您今天的概览。如果在使用中遇到任何问题，恳请联系zhahuang2868@guiscn.com或者去github（https://github.com/marecop/ulinkporatal/issues）提交issues。
           </p>
         </StaggerItem>
 
