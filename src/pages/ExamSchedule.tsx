@@ -34,7 +34,7 @@ export default function ExamSchedule() {
             考试信息
           </h1>
           <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>
-            按日期查看 Mock Exam 安排与 Full Centre Supervision 信息
+            查看您即将到来的考试。
           </p>
         </StaggerItem>
 
