@@ -9,10 +9,12 @@ import {
   deleteMicrosoftBinding,
   getExamScheduleState,
   getMicrosoftBinding,
+  getVersionUpdatePreference,
   isDatabaseConfigured,
   listExamRecords,
   updateMicrosoftBindingSyncStatus,
   upsertMicrosoftBinding,
+  upsertVersionUpdatePreference,
 } from "./server/db.js";
 import {
   buildMicrosoftAuthorizeUrl,
@@ -26,6 +28,7 @@ import {
   getTemporaryFallbackExamRecords,
   resolveTemporaryFallbackToday,
 } from "./server/exams/temporaryFallback.js";
+import { CURRENT_RELEASE } from "./src/lib/appMeta.js";
 
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = "portal_session";
@@ -150,6 +153,31 @@ function getRequestOrigin(req: express.Request) {
     throw new Error("Host header is missing");
   }
   return `${protocol}://${host}`;
+}
+
+function normalizeOrigin(origin: string) {
+  return origin.replace(/\/$/, "");
+}
+
+function getConfiguredCorsOrigins() {
+  return (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map(normalizeOrigin);
+}
+
+function isAllowedCorsOrigin(req: express.Request, origin?: string) {
+  if (!origin) return true;
+
+  const allowedOrigins = new Set(getConfiguredCorsOrigins());
+  try {
+    allowedOrigins.add(normalizeOrigin(getRequestOrigin(req)));
+  } catch {
+    // Ignore malformed host headers and fall back to explicit origins only.
+  }
+
+  return allowedOrigins.has(normalizeOrigin(origin));
 }
 
 function updateSession(res: express.Response, req: express.Request, patch: Partial<SessionPayload>) {
@@ -498,9 +526,14 @@ async function createApp() {
   const app = express();
   app.set("trust proxy", true);
 
-  app.use(cors({
-    origin: true,
-    credentials: true,
+  // 只允许当前站点自身或显式白名单来源携带凭证，避免第三方站点直接读到用户数据。
+  app.use(cors((req, callback) => {
+    const requestOrigin = req.header("Origin");
+    const allowedOrigin = isAllowedCorsOrigin(req, requestOrigin) ? requestOrigin ?? false : false;
+    callback(null, {
+      origin: allowedOrigin,
+      credentials: true,
+    });
   }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -523,6 +556,50 @@ async function createApp() {
       return res.json({ authenticated: true });
     }
     return res.status(401).json({ authenticated: false });
+  });
+
+  app.get("/api/version-updates/status", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      const preference = isDatabaseConfigured()
+        ? await getVersionUpdatePreference(pupilId, CURRENT_RELEASE.versionKey)
+        : null;
+
+      return res.json({
+        pupilId,
+        version: CURRENT_RELEASE.versionKey,
+        dismissed: Boolean(preference?.dismissed),
+        persisted: isDatabaseConfigured(),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to load version update status" });
+    }
+  });
+
+  app.post("/api/version-updates/dismiss", async (req, res) => {
+    if (!readSession(req)?.authCookies) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    if (!isDatabaseConfigured()) {
+      return res.status(503).json({ error: "Database is not configured" });
+    }
+
+    try {
+      const pupilId = await ensurePupilId(req, res);
+      await upsertVersionUpdatePreference({
+        pupilId,
+        version: CURRENT_RELEASE.versionKey,
+        dismissed: true,
+      });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Failed to dismiss version update prompt" });
+    }
   });
 
   app.get("/api/microsoft/status", async (req, res) => {
@@ -1245,6 +1322,7 @@ async function createApp() {
       }
 
       if (pupilId) {
+        updateSession(res, req, { pupilId });
         return res.json({ pupilId });
       } else {
         return res.status(404).json({ error: "Could not find pupil ID in HTML" });
@@ -1471,7 +1549,6 @@ async function createApp() {
 
     try {
       const upstreamUrl = `https://ulinkcollege.engagehosted.cn/Services/ReportCommentServices.asmx/${action}`;
-      console.log(`[${action}] →`, JSON.stringify(req.body).substring(0, 300));
 
       const response = await axios.post(upstreamUrl, req.body, {
         headers: {
@@ -1486,10 +1563,7 @@ async function createApp() {
         validateStatus: () => true,
       });
 
-      console.log(`[${action}] ← status=${response.status}`, JSON.stringify(response.data).substring(0, 500));
-
       if (response.status === 302) {
-        console.log(`[${action}] redirect →`, response.headers.location);
         return res.status(401).json({ error: "Unauthorized (session expired)" });
       }
       if (response.status === 401) {

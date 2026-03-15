@@ -4,7 +4,14 @@ import type { DownloadedGraphFile, ExamFileKind } from "../exams/types.js";
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const SHAREPOINT_HOST = "guischina.sharepoint.com";
 const SHAREPOINT_SITE_PATH = "/sites/ulcstudentportal";
-const SEARCH_TERMS = ["Exam Arrangement", "Attendence Sheet", "Attendance Sheet", "Classroom Change"] as const;
+const SEARCH_TERMS = [
+  "Exam Arrangement",
+  "Attendence Sheet",
+  "Attendance Sheet",
+  "Classroom Change",
+  "Full Centre Supervision",
+  "Full Center Supervision",
+] as const;
 const GRAPH_REQUEST_TIMEOUT_MS = 30000;
 
 export interface GraphSite {
@@ -35,6 +42,9 @@ function classifyFile(name: string): ExamFileKind | null {
   const lowered = name.toLowerCase();
   if (lowered.includes("attendence sheet") || lowered.includes("attendance sheet")) return "attendance";
   if (lowered.includes("classroom change")) return "classroom-change";
+  if (lowered.includes("full centre supervision") || lowered.includes("full center supervision")) {
+    return "full-centre-supervision";
+  }
   return null;
 }
 

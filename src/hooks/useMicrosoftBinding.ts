@@ -1,24 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MicrosoftBindingStatus, SyncExamResponse } from "../types/exam";
+import { redirectToLogin } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 const STATUS_TIMEOUT_MS = 10000;
 const MUTATION_TIMEOUT_MS = 15000;
 const SYNC_TIMEOUT_MS = 120000;
-
-async function fetchJsonWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number) {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
 
 export function useMicrosoftBinding() {
   const [status, setStatus] = useState<MicrosoftBindingStatus | null>(null);
@@ -31,7 +18,11 @@ export function useMicrosoftBinding() {
     setError(null);
 
     try {
-      const response = await fetchJsonWithTimeout("/api/microsoft/status", { credentials: "include" }, STATUS_TIMEOUT_MS);
+      const response = await fetchWithTimeout("/api/microsoft/status", { credentials: "include" }, STATUS_TIMEOUT_MS);
+      if (response.status === 401) {
+        redirectToLogin();
+        return null;
+      }
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -51,10 +42,15 @@ export function useMicrosoftBinding() {
 
   const unbind = useCallback(async () => {
     setError(null);
-    const response = await fetchJsonWithTimeout("/api/microsoft/unbind", {
+    const response = await fetchWithTimeout("/api/microsoft/unbind", {
       method: "POST",
       credentials: "include",
     }, MUTATION_TIMEOUT_MS);
+
+    if (response.status === 401) {
+      redirectToLogin();
+      return;
+    }
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -71,10 +67,15 @@ export function useMicrosoftBinding() {
     setError(null);
 
     try {
-      const response = await fetchJsonWithTimeout("/api/exams/sync", {
+      const response = await fetchWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
       }, SYNC_TIMEOUT_MS);
+
+      if (response.status === 401) {
+        redirectToLogin();
+        return null;
+      }
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

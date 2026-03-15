@@ -7,6 +7,7 @@ import { motion } from "motion/react";
 import { ListSkeleton } from "../components/Skeleton";
 import { useExams } from "../hooks/useExams";
 import { buildTodayTimeline, formatDurationMinutes, formatExamDate, getNextUpcomingExam } from "../lib/exam";
+import { redirectToLogin } from "../lib/auth";
 
 interface Lesson {
   day: string;
@@ -49,7 +50,7 @@ export default function Home() {
         const cached = sessionStorage.getItem("activitiesData");
         if (cached) { setActivities(JSON.parse(cached).slice(0, 5)); setIsLoadingActivities(false); return; }
         const response = await fetch("/api/activities", { credentials: "include" });
-        if (response.status === 401) { setActivitiesError("登录已过期"); return; }
+        if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         let parsed = data?.d ? (() => { try { return JSON.parse(data.d); } catch { return data.d; } })() : data;
@@ -70,7 +71,7 @@ export default function Home() {
           setIsLoadingClasses(false); return;
         }
         const response = await fetch("/api/timetable", { credentials: "include" });
-        if (response.status === 401) { setClassesError("登录已过期"); return; }
+        if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         sessionStorage.setItem("timetableData", JSON.stringify(data));

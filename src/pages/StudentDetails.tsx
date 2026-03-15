@@ -7,6 +7,7 @@ import {
   User, Calendar, GraduationCap, Users, Cake,
   AlertCircle, Hash, UserCircle,
 } from "lucide-react";
+import { redirectToLogin } from "../lib/auth";
 
 interface StudentInfo {
   surname: string;
@@ -38,6 +39,10 @@ export default function StudentDetails() {
           credentials: "include",
           signal: ctrl.signal,
         });
+        if (res.status === 401) {
+          redirectToLogin();
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setInfo(data);

@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useNavigation } from "../context/NavigationContext";
+import { CURRENT_RELEASE } from "../lib/appMeta";
+import { clearPortalClientState } from "../lib/auth";
 
 type NavLeafItem = {
   name: string;
@@ -180,11 +182,7 @@ export default function Sidebar() {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "include" });
     } catch { /* ignore */ }
-    sessionStorage.removeItem("activitiesData");
-    sessionStorage.removeItem("timetableData");
-    sessionStorage.removeItem("examsData");
-    sessionStorage.removeItem("examsAutoSyncAt");
-    localStorage.removeItem("authToken");
+    clearPortalClientState();
     navigate("/");
   };
 
@@ -343,6 +341,9 @@ export default function Sidebar() {
             <LogOut className="w-[18px] h-[18px]" />
             退出登录
           </motion.button>
+          <p className="px-3 pt-1 text-[11px] font-medium" style={{ color: "var(--text-tertiary)" }}>
+            Version {CURRENT_RELEASE.displayVersion}
+          </p>
         </div>
       </aside>
 
@@ -502,6 +503,9 @@ export default function Sidebar() {
                   <LogOut className="w-5 h-5" />
                   退出登录
                 </button>
+                <p className="px-4 pt-1 text-[11px] font-medium" style={{ color: "var(--text-tertiary)" }}>
+                  Version {CURRENT_RELEASE.displayVersion}
+                </p>
               </div>
             </motion.div>
           </>

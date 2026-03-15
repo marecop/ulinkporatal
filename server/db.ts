@@ -67,6 +67,14 @@ export interface ExamScheduleStateRow {
   updatedAt: string;
 }
 
+export interface VersionUpdatePreferenceRow {
+  pupilId: string;
+  version: string;
+  dismissed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 let pool: Pool | null = null;
 let schemaReadyPromise: Promise<void> | null = null;
 
@@ -192,8 +200,20 @@ async function ensureSchema() {
           );
         `);
 
+        await client.query(`
+          create table if not exists version_update_preferences (
+            pupil_id text not null,
+            version_key text not null,
+            dismissed boolean not null default false,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            primary key (pupil_id, version_key)
+          );
+        `);
+
         await client.query("create index if not exists idx_exam_records_pupil_id on exam_records (pupil_id);");
         await client.query("create index if not exists idx_exam_records_exam_date on exam_records (exam_date);");
+        await client.query("create index if not exists idx_version_update_preferences_pupil_id on version_update_preferences (pupil_id);");
       } finally {
         client.release();
       }
@@ -265,6 +285,16 @@ function mapExamScheduleState(row: any): ExamScheduleStateRow {
     lastRefreshAt: row.last_refresh_at ? new Date(row.last_refresh_at).toISOString() : null,
     lastRefreshStatus: row.last_refresh_status ?? null,
     lastRefreshMessage: row.last_refresh_message ?? null,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
+}
+
+function mapVersionUpdatePreference(row: any): VersionUpdatePreferenceRow {
+  return {
+    pupilId: row.pupil_id,
+    version: row.version_key,
+    dismissed: Boolean(row.dismissed),
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
   };
@@ -429,6 +459,38 @@ export async function upsertExamScheduleState(input: {
     input.lastRefreshAt ?? null,
     input.lastRefreshStatus ?? null,
     input.lastRefreshMessage ?? null,
+  ]);
+}
+
+export async function getVersionUpdatePreference(pupilId: string, version: string) {
+  await ensureSchema();
+  const result = await getPool().query(
+    "select * from version_update_preferences where pupil_id = $1 and version_key = $2 limit 1",
+    [pupilId, version],
+  );
+  return result.rows[0] ? mapVersionUpdatePreference(result.rows[0]) : null;
+}
+
+export async function upsertVersionUpdatePreference(input: {
+  pupilId: string;
+  version: string;
+  dismissed: boolean;
+}) {
+  await ensureSchema();
+  await getPool().query(`
+    insert into version_update_preferences (
+      pupil_id,
+      version_key,
+      dismissed,
+      updated_at
+    ) values ($1, $2, $3, now())
+    on conflict (pupil_id, version_key) do update set
+      dismissed = excluded.dismissed,
+      updated_at = now()
+  `, [
+    input.pupilId,
+    input.version,
+    input.dismissed,
   ]);
 }
 

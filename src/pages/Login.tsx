@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform } from "motion/react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { clearPortalTransientStorage } from "../lib/auth";
 
 // ─── Expanding-circle transition (vanilla DOM, survives route change) ────────
 
@@ -175,8 +176,7 @@ export default function Login() {
     }).catch(() => ({ success: false, error: "网络错误，请重试。" }));
 
     const onSuccess = () => {
-      sessionStorage.removeItem("activitiesData");
-      sessionStorage.removeItem("timetableData");
+      clearPortalTransientStorage();
       localStorage.setItem("authToken", "logged-in");
       navigate("/home");
     };

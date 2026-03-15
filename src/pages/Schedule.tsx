@@ -6,6 +6,7 @@ import { ScheduleSkeleton } from "../components/Skeleton";
 import { MapPin, User, BookOpen, FileText } from "lucide-react";
 import { useExams } from "../hooks/useExams";
 import { buildDayTimeline } from "../lib/exam";
+import { redirectToLogin } from "../lib/auth";
 
 interface Lesson {
   day: string;
@@ -48,7 +49,7 @@ export default function Schedule() {
         const cached = sessionStorage.getItem("timetableData");
         if (cached) { setLessons(JSON.parse(cached).lessons || []); setIsLoading(false); return; }
         const response = await fetch("/api/timetable", { credentials: "include" });
-        if (response.status === 401) { setError("登录已过期"); return; }
+        if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         sessionStorage.setItem("timetableData", JSON.stringify(data));

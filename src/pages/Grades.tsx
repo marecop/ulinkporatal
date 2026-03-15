@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, ChevronDown, FileText, Table2, User, ChevronRight } from "lucide-react";
+import { clearPortalClientState } from "../lib/auth";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -200,9 +201,7 @@ export default function Grades() {
   const [loadingMarksheet, setLoadingMarksheet] = useState(false);
 
   const handle401 = (_action?: string) => {
-    sessionStorage.removeItem('activitiesData');
-    sessionStorage.removeItem('timetableData');
-    localStorage.removeItem('authToken');
+    clearPortalClientState();
     navigate('/', { replace: true });
     throw new Error(REDIRECT_ERROR);
   };

@@ -8,8 +8,8 @@ interface NavigationContextType {
 }
 
 const navOrder = [
-  "/home", "/details", "/grades", "/scores", "/reports",
-  "/exams", "/comments", "/dms", "/schedule", "/activities",
+  "/home", "/details", "/grades", "/reports",
+  "/exams", "/comments", "/schedule", "/activities",
   "/diary", "/websites", "/settings",
 ];
 

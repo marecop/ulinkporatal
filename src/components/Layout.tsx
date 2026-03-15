@@ -2,11 +2,15 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
+import VersionUpdateModal from "./VersionUpdateModal";
+import { clearPortalClientState } from "../lib/auth";
+import { useVersionUpdatePrompt } from "../hooks/useVersionUpdatePrompt";
 
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
+  const versionPrompt = useVersionUpdatePrompt(!checking);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -14,16 +18,13 @@ export default function Layout() {
       .then((res) => {
         if (ctrl.signal.aborted) return;
         if (!res.ok) {
-          sessionStorage.removeItem("activitiesData");
-          sessionStorage.removeItem("timetableData");
-          sessionStorage.removeItem("examsData");
-          sessionStorage.removeItem("examsAutoSyncAt");
-          localStorage.removeItem("authToken");
+          clearPortalClientState();
           navigate("/", { replace: true });
         }
       })
       .catch((err) => {
         if (err.name === "AbortError") return;
+        clearPortalClientState();
         navigate("/", { replace: true });
       })
       .finally(() => {
@@ -85,6 +86,16 @@ export default function Layout() {
           </AnimatePresence>
         </div>
       </main>
+
+      <VersionUpdateModal
+        open={versionPrompt.open}
+        release={versionPrompt.release}
+        saving={versionPrompt.saving}
+        error={versionPrompt.error}
+        onConfirm={versionPrompt.handleConfirm}
+        onReadMore={versionPrompt.handleReadMore}
+        onDismiss={versionPrompt.handleDismiss}
+      />
     </div>
   );
 }

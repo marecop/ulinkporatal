@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ExamsResponse, SyncExamResponse } from "../types/exam";
+import { redirectToLogin } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 const EXAMS_CACHE_KEY = "examsData";
 const EXAMS_AUTO_SYNC_KEY = "examsAutoSyncAt";
@@ -53,21 +55,6 @@ function markAutoSyncAttempt() {
   sessionStorage.setItem(EXAMS_AUTO_SYNC_KEY, String(Date.now()));
 }
 
-async function fetchJsonWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number) {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
-
 export function useExams(options?: { autoSync?: boolean }) {
   const autoSync = options?.autoSync ?? false;
   const [data, setData] = useState<ExamsResponse | null>(null);
@@ -80,10 +67,15 @@ export function useExams(options?: { autoSync?: boolean }) {
     setError(null);
 
     try {
-      const response = await fetchJsonWithTimeout("/api/exams/sync", {
+      const response = await fetchWithTimeout("/api/exams/sync", {
         method: "POST",
         credentials: "include",
       }, SYNC_FETCH_TIMEOUT_MS);
+
+      if (response.status === 401) {
+        redirectToLogin();
+        return null;
+      }
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -118,11 +110,15 @@ export function useExams(options?: { autoSync?: boolean }) {
 
     try {
       const today = getCurrentLocalDate();
-      const response = await fetchJsonWithTimeout(
+      const response = await fetchWithTimeout(
         `/api/exams?today=${encodeURIComponent(today)}&from=${encodeURIComponent(today)}`,
         { credentials: "include" },
         READ_FETCH_TIMEOUT_MS,
       );
+      if (response.status === 401) {
+        redirectToLogin();
+        return null;
+      }
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

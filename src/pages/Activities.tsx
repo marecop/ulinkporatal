@@ -4,6 +4,7 @@ import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
 import { ListSkeleton } from "../components/Skeleton";
 import { Activity, Clock, Hash } from "lucide-react";
+import { redirectToLogin } from "../lib/auth";
 
 export default function Activities() {
   const [activities, setActivities] = useState<any[]>([]);
@@ -16,7 +17,7 @@ export default function Activities() {
         const cached = sessionStorage.getItem("activitiesData");
         if (cached) { setActivities(JSON.parse(cached)); setIsLoading(false); return; }
         const response = await fetch("/api/activities", { credentials: "include" });
-        if (response.status === 401) { setError("登录已过期"); return; }
+        if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         let parsed = data?.d ? (() => { try { return JSON.parse(data.d); } catch { return data.d; } })() : data;
