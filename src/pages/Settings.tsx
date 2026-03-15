@@ -32,13 +32,13 @@ export default function Settings() {
 
     const reason = searchParams.get("reason");
     const messages: Record<string, { tone: "success" | "warning" | "danger"; text: string }> = {
-      connected: { tone: "success", text: "Microsoft 账号已成功绑定，可开始同步考试安排。" },
-      "config-error": { tone: "warning", text: "Microsoft 集成尚未完成配置，请先补齐服务器环境变量与数据库。" },
+      connected: { tone: "success", text: "Microsoft 账号已成功绑定，自动同步考试安排已经就绪。" },
+      "config-error": { tone: "warning", text: "致维护者：Microsoft 集成尚未完成配置，请先补齐服务器环境变量与数据库。用户可以暂时忽略此消息，稍后再试。" },
       "portal-auth-required": { tone: "warning", text: "当前门户登录已失效，请重新登录后再绑定 Microsoft 账号。" },
       "state-error": { tone: "danger", text: "Microsoft 授权状态校验失败，请重新发起绑定。" },
-      "oauth-error": { tone: "danger", text: `Microsoft 授权失败${reason ? `：${reason}` : ""}` },
-      "connect-error": { tone: "danger", text: `无法发起 Microsoft 授权${reason ? `：${reason}` : ""}` },
-      "callback-error": { tone: "danger", text: `Microsoft 回调处理失败${reason ? `：${reason}` : ""}` },
+      "oauth-error": { tone: "danger", text: `致维护者：Microsoft 授权失败${reason ? `：${reason}` : ""}` },
+      "connect-error": { tone: "danger", text: `致维护者：无法发起 Microsoft 授权${reason ? `：${reason}` : ""}` },
+      "callback-error": { tone: "danger", text: `致维护者：Microsoft 回调处理失败${reason ? `：${reason}` : ""}` },
     };
 
     return messages[state] ?? null;
@@ -68,8 +68,8 @@ export default function Settings() {
     <PageTransition>
       <StaggerContainer className="max-w-2xl mx-auto space-y-8 pb-16">
         <StaggerItem>
-          <h1 className="text-[32px] font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>设置</h1>
-          <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>自定义您的门户体验</p>
+          <h1 className="text-[32px] font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>设定</h1>
+          <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>客制化设定及微软账号绑定</p>
         </StaggerItem>
 
         {microsoftBanner && (
@@ -130,7 +130,7 @@ export default function Settings() {
 
         {/* Accent Color */}
         <StaggerItem>
-          <SettingsSection title="强调色" description="选择界面的主色调">
+          <SettingsSection title="强调色" description="选择界面的主色调（按钮图标等）">
             <div className="flex gap-3">
               {accentColors.map(color => {
                 const active = accentColor === color.id;
@@ -180,7 +180,7 @@ export default function Settings() {
             <ToggleRow
               icon={Sparkles}
               label="启用动画"
-              description="页面过渡、卡片悬停、交错出现效果"
+              description="页面过渡、卡片悬停、交错出现效果。关闭则取消这些样式，适合晕3D或设备配置较低的用户。"
               checked={animationsEnabled}
               onChange={setAnimationsEnabled}
             />
@@ -188,7 +188,7 @@ export default function Settings() {
         </StaggerItem>
 
         <StaggerItem>
-          <SettingsSection title="Microsoft 账号绑定（用于获取考试信息）" description="绑定后可从学校 SharePoint 自动同步当前学生的考试安排">
+          <SettingsSection title="Microsoft 账号绑定（用于获取考试信息）" description="绑定后门户会自动同步你的考试安排。目前仅能跳到微软登录界面，但无法绑定，因为Graph API权限尚未获得管理员核准。">
             <div className="space-y-3">
               <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl" style={{ background: "var(--bg-secondary)" }}>
                 <div
@@ -214,7 +214,7 @@ export default function Settings() {
                         ? `最近同步：${microsoftStatus.lastSyncAt ? new Date(microsoftStatus.lastSyncAt).toLocaleString("zh-CN") : "尚未同步"}${microsoftStatus.lastSyncMessage ? ` · ${microsoftStatus.lastSyncMessage}` : ""}`
                         : microsoftStatus?.bindingStatusKnown === false
                           ? "已登录门户，可直接开始绑定；学生身份会在首次授权或同步时自动确认。"
-                        : "绑定后系统会通过 Microsoft Graph 读取 SharePoint 中的考试文件。"}
+                        : "绑定后系统会自动展示你的考试信息和日程。"}
                   </p>
                 </div>
                 <span
@@ -283,7 +283,7 @@ export default function Settings() {
                 <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>自定义背景功能即将推出</p>
               </div>
               <span className="text-[11px] px-2 py-1 rounded-full font-semibold" style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}>
-                即将推出
+                敬请期待
               </span>
             </div>
           </SettingsSection>
