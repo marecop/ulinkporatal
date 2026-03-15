@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -8,6 +8,20 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useNavigation } from "../context/NavigationContext";
+
+type NavLeafItem = {
+  name: string;
+  path: string;
+  icon: typeof Home;
+};
+
+type NavGroupItem = {
+  name: string;
+  icon: typeof Info;
+  subItems: Array<{ name: string; path: string }>;
+};
+
+type NavItem = NavLeafItem | NavGroupItem;
 
 const navItems = [
   { name: "主页", path: "/home", icon: Home },
@@ -30,25 +44,44 @@ const navItems = [
       { name: "关于程序", path: "/about/app" },
     ]
   }
-];
+] satisfies NavItem[];
 
-function SidebarGroup({ item, handleNavClick }: any) {
+function isLeafItem(item: NavItem): item is NavLeafItem {
+  return "path" in item;
+}
+
+function isGroupItem(item: NavItem): item is NavGroupItem {
+  return "subItems" in item;
+}
+
+function SidebarGroup({
+  item,
+  handleNavClick,
+  mobile = false,
+}: {
+  item: NavGroupItem;
+  handleNavClick: (targetPath: string, options?: { navigateNow?: boolean }) => void;
+  mobile?: boolean;
+}) {
   const location = useLocation();
-  const isActiveGroup = item.subItems.some((sub: any) => location.pathname.startsWith(sub.path));
+  const isActiveGroup = item.subItems.some((sub) => location.pathname.startsWith(sub.path));
   const [isOpen, setIsOpen] = useState(isActiveGroup);
 
   return (
     <div className="space-y-0.5">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group",
+          "flex items-center justify-between w-full rounded-xl font-medium transition-all duration-200 group touch-manipulation",
+          mobile ? "px-4 py-3.5 text-[14px] min-h-[52px]" : "px-3 py-2.5 text-[13px]",
           isActiveGroup ? "font-semibold text-[var(--accent)]" : "text-[var(--text-secondary)]"
         )}
+        style={mobile ? { background: isActiveGroup ? "var(--accent-soft)" : "transparent" } : undefined}
       >
         <div className="flex items-center gap-3">
           <item.icon
-            className="w-[18px] h-[18px] transition-colors duration-200"
+            className={cn("transition-colors duration-200", mobile ? "w-5 h-5" : "w-[18px] h-[18px]")}
             style={{ color: isActiveGroup ? "var(--accent)" : "var(--text-tertiary)" }}
           />
           <span>{item.name}</span>
@@ -67,39 +100,59 @@ function SidebarGroup({ item, handleNavClick }: any) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="pl-9 pr-1 py-1 space-y-0.5">
-              {item.subItems.map((sub: any) => (
-                <NavLink
-                  key={sub.path}
-                  to={sub.path}
-                  onClick={() => handleNavClick(sub.path)}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 relative group",
-                      isActive ? "font-semibold" : ""
-                    )
-                  }
-                  style={({ isActive }) => ({
-                    color: isActive ? "var(--accent)" : "var(--text-secondary)",
-                  })}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <motion.div
-                          layoutId="sidebar-sub-active"
-                          className="absolute inset-0 rounded-lg"
-                          style={{
-                            background: "var(--accent-soft)",
-                          }}
-                          transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                        />
-                      )}
+            <div className={cn(mobile ? "pl-4 pr-0 py-2 space-y-1" : "pl-9 pr-1 py-1 space-y-0.5")}>
+              {item.subItems.map((sub) => {
+                if (mobile) {
+                  const isActive = location.pathname.startsWith(sub.path);
+                  return (
+                    <button
+                      key={sub.path}
+                      type="button"
+                      onClick={() => handleNavClick(sub.path, { navigateNow: true })}
+                      className="w-full flex items-center relative group transition-all duration-200 touch-manipulation px-4 py-3 rounded-2xl text-[13px] min-h-[48px]"
+                      style={{
+                        color: isActive ? "var(--accent)" : "var(--text-secondary)",
+                        background: isActive ? "var(--accent-soft)" : "transparent",
+                      }}
+                    >
                       <span className="relative z-10">{sub.name}</span>
-                    </>
-                  )}
-                </NavLink>
-              ))}
+                    </button>
+                  );
+                }
+
+                return (
+                  <NavLink
+                    key={sub.path}
+                    to={sub.path}
+                    onClick={() => handleNavClick(sub.path)}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center relative group transition-all duration-200 touch-manipulation px-3 py-2 rounded-lg text-[12px]",
+                        isActive ? "font-semibold" : ""
+                      )
+                    }
+                    style={({ isActive }) => ({
+                      color: isActive ? "var(--accent)" : "var(--text-secondary)",
+                    })}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <motion.div
+                            layoutId="sidebar-sub-active"
+                            className="absolute inset-0 rounded-lg"
+                            style={{
+                              background: "var(--accent-soft)",
+                            }}
+                            transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                          />
+                        )}
+                        <span className="relative z-10">{sub.name}</span>
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -114,6 +167,15 @@ export default function Sidebar() {
   const { navigateWithDirection } = useNavigation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
+
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "include" });
@@ -126,20 +188,23 @@ export default function Sidebar() {
     navigate("/");
   };
 
-  const handleNavClick = (targetPath: string) => {
+  const handleNavClick = (targetPath: string, options?: { navigateNow?: boolean }) => {
     if (targetPath === location.pathname) {
       setMobileMenuOpen(false);
       return;
     }
     navigateWithDirection(targetPath, location.pathname);
+    if (options?.navigateNow) {
+      navigate(targetPath);
+    }
     setMobileMenuOpen(false);
   };
 
   const mobileBottomItems = [
-    navItems.find(i => i.path === "/home"),
-    navItems.find(i => i.path === "/grades"),
-    navItems.find(i => i.path === "/schedule"),
-  ];
+    navItems.filter(isLeafItem).find(i => i.path === "/home"),
+    navItems.filter(isLeafItem).find(i => i.path === "/exams"),
+    navItems.filter(isLeafItem).find(i => i.path === "/schedule"),
+  ].filter((item): item is NavLeafItem => Boolean(item));
 
   return (
     <>
@@ -174,8 +239,12 @@ export default function Sidebar() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto space-y-0.5 pr-1 hide-scrollbar">
           {navItems.map((item) => {
-            if (item.subItems) {
-              return <SidebarGroup key={item.name} item={item} handleNavClick={handleNavClick} />;
+            if (isGroupItem(item)) {
+              return (
+                <div key={item.name}>
+                  <SidebarGroup item={item} handleNavClick={handleNavClick} />
+                </div>
+              );
             }
             return (
               <NavLink
@@ -278,36 +347,37 @@ export default function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass border-t pb-[env(safe-area-inset-bottom)]" style={{ borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-around px-2 py-2">
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t pb-[calc(env(safe-area-inset-bottom)+0.35rem)]"
+        style={{ background: "var(--glass-bg)", borderColor: "var(--border)", backdropFilter: "blur(var(--glass-blur))", WebkitBackdropFilter: "blur(var(--glass-blur))" }}
+      >
+        <div className="flex items-end justify-around gap-1 px-2 pt-2">
           {mobileBottomItems.map((item) => {
-            if (!item) return null;
             const isActive = location.pathname === item.path;
             return (
               <button
                 key={item.path}
-                onClick={() => handleNavClick(item.path!)}
-                className="flex flex-col items-center justify-center w-16 h-12 relative"
+                type="button"
+                onClick={() => handleNavClick(item.path, { navigateNow: true })}
+                className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2.5 min-h-[58px] relative touch-manipulation"
+                style={{ background: isActive ? "var(--accent-soft)" : "transparent" }}
               >
                 <motion.div
                   animate={{ 
-                    y: isActive ? -4 : 0,
+                    y: isActive ? -2 : 0,
                     scale: isActive ? 1.1 : 1
                   }}
                   transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 >
                   <item.icon
-                    className="w-6 h-6"
+                    className="w-[22px] h-[22px]"
                     style={{ color: isActive ? "var(--accent)" : "var(--text-tertiary)" }}
                   />
                 </motion.div>
                 <motion.span
-                  className="text-[10px] font-medium absolute bottom-0"
+                  className="text-[10px] font-medium leading-none"
                   initial={false}
-                  animate={{ 
-                    opacity: isActive ? 1 : 0.7,
-                    y: isActive ? 4 : 8
-                  }}
+                  animate={{ opacity: isActive ? 1 : 0.72 }}
                   style={{ color: isActive ? "var(--accent)" : "var(--text-tertiary)" }}
                 >
                   {item.name}
@@ -317,8 +387,10 @@ export default function Sidebar() {
           })}
           
           <button
+            type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center justify-center w-16 h-12 relative"
+            className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2.5 min-h-[58px] relative touch-manipulation"
+            style={{ background: mobileMenuOpen ? "var(--accent-soft)" : "transparent" }}
           >
             <motion.div
               animate={{ scale: mobileMenuOpen ? 1.1 : 1 }}
@@ -330,10 +402,9 @@ export default function Sidebar() {
               />
             </motion.div>
             <motion.span
-              className="text-[10px] font-medium absolute bottom-0"
+              className="text-[10px] font-medium leading-none"
               animate={{ 
-                opacity: mobileMenuOpen ? 1 : 0.7,
-                y: mobileMenuOpen ? 4 : 8
+                opacity: mobileMenuOpen ? 1 : 0.72,
               }}
               style={{ color: mobileMenuOpen ? "var(--accent)" : "var(--text-tertiary)" }}
             >
@@ -360,7 +431,7 @@ export default function Sidebar() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass rounded-t-3xl flex flex-col max-h-[85vh]"
+              className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass rounded-t-3xl flex flex-col max-h-[min(88dvh,720px)]"
               style={{ borderTop: "1px solid var(--border)" }}
             >
               <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: "var(--border)" }}>
@@ -373,23 +444,29 @@ export default function Sidebar() {
                   </span>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 rounded-full bg-black/5 dark:bg-white/10"
+                  className="p-2.5 rounded-full bg-black/5 dark:bg-white/10 touch-manipulation"
                 >
                   <X className="w-5 h-5" style={{ color: "var(--text-primary)" }} />
                 </button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-4 space-y-1 pb-24">
+              <div className="flex-1 overflow-y-auto p-4 space-y-1 pb-[calc(6rem+env(safe-area-inset-bottom))]">
                 {navItems.map((item) => {
-                  if (item.subItems) {
-                    return <SidebarGroup key={item.name} item={item} handleNavClick={handleNavClick} />;
+                  if (isGroupItem(item)) {
+                    return (
+                      <div key={item.name}>
+                        <SidebarGroup item={item} handleNavClick={handleNavClick} mobile />
+                      </div>
+                    );
                   }
                   return (
                     <button
                       key={item.path}
-                      onClick={() => handleNavClick(item.path!)}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all"
+                      type="button"
+                      onClick={() => handleNavClick(item.path, { navigateNow: true })}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all touch-manipulation min-h-[52px]"
                       style={{ 
                         background: location.pathname === item.path ? "var(--accent-soft)" : "transparent",
                         color: location.pathname === item.path ? "var(--accent)" : "var(--text-secondary)"
@@ -404,8 +481,9 @@ export default function Sidebar() {
                 <div className="my-4 border-t" style={{ borderColor: "var(--border)" }} />
                 
                 <button
-                  onClick={() => handleNavClick("/settings")}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all"
+                  type="button"
+                  onClick={() => handleNavClick("/settings", { navigateNow: true })}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all touch-manipulation min-h-[52px]"
                   style={{ 
                     background: location.pathname === "/settings" ? "var(--accent-soft)" : "transparent",
                     color: location.pathname === "/settings" ? "var(--accent)" : "var(--text-secondary)"
@@ -416,8 +494,9 @@ export default function Sidebar() {
                 </button>
                 
                 <button
+                  type="button"
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all"
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[14px] font-medium transition-all touch-manipulation min-h-[52px]"
                   style={{ color: "var(--danger)" }}
                 >
                   <LogOut className="w-5 h-5" />

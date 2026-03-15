@@ -66,7 +66,7 @@ export default function Settings() {
 
   return (
     <PageTransition>
-      <StaggerContainer className="max-w-2xl mx-auto space-y-8 pb-16">
+      <StaggerContainer className="max-w-2xl mx-auto space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:pb-16">
         <StaggerItem>
           <h1 className="text-[32px] font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>设定</h1>
           <p className="text-[14px] mt-1" style={{ color: "var(--text-secondary)" }}>客制化设定及微软账号绑定</p>
@@ -91,7 +91,7 @@ export default function Settings() {
         {/* Theme Mode */}
         <StaggerItem>
           <SettingsSection title="主题" description="选择界面的外观模式">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {themeModes.map(mode => {
                 const active = themeMode === mode.id;
                 return (
@@ -131,7 +131,7 @@ export default function Settings() {
         {/* Accent Color */}
         <StaggerItem>
           <SettingsSection title="强调色" description="选择界面的主色调（按钮图标等）">
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {accentColors.map(color => {
                 const active = accentColor === color.id;
                 const displayColor = theme === "dark" ? color.darkColor : color.lightColor;
@@ -234,7 +234,7 @@ export default function Settings() {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {!microsoftStatus?.bound ? (
                   <ActionButton icon={Link2} onClick={handleMicrosoftConnect} disabled={microsoftLoading}>
                     绑定 Microsoft 账号
@@ -318,7 +318,7 @@ function ToggleRow({ icon: Icon, label, description, checked, onChange }: {
   return (
     <button
       onClick={() => onChange(!checked)}
-      className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-colors"
+      className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-colors touch-manipulation min-h-[52px]"
       style={{ background: "var(--bg-secondary)" }}
     >
       <Icon className="w-5 h-5 flex-shrink-0" style={{ color: checked ? "var(--accent)" : "var(--text-tertiary)" }} />
@@ -366,7 +366,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+      className="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-3 rounded-xl border text-[13px] font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[48px]"
       style={palette}
       whileHover={disabled ? undefined : { scale: 1.02 }}
       whileTap={disabled ? undefined : { scale: 0.98 }}

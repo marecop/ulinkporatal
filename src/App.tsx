@@ -18,18 +18,16 @@ const PublicPrivacy = () => {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen noise-overlay" style={{ background: "var(--bg-secondary)" }}>
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="max-w-4xl mx-auto px-4 py-5 sm:px-6 sm:py-8">
         <button 
           onClick={() => navigate(-1)}
-          className="mb-8 flex items-center gap-2 text-[14px] font-medium transition-colors hover:text-[var(--accent)]"
+          className="mb-4 sm:mb-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[14px] font-medium transition-colors touch-manipulation"
           style={{ color: "var(--text-secondary)" }}
         >
           <ArrowLeft className="w-4 h-4" />
           返回
         </button>
-        <div className="glass rounded-3xl p-8" style={{ borderColor: "var(--border)" }}>
-          <PrivacyPolicy />
-        </div>
+        <PrivacyPolicy />
       </div>
     </div>
   );

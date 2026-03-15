@@ -1,135 +1,316 @@
-import React from 'react';
-import { motion } from 'motion/react';
-import { ShieldCheck, Scale, FileCode2, Info } from 'lucide-react';
+import React from "react";
+import { motion } from "motion/react";
+import { ShieldCheck, Scale, FileCode2, Info } from "lucide-react";
+import { PageTransition } from "../components/PageTransition";
 
-const PageWrapper = ({ children, title, icon: Icon }: any) => (
-  <div className="p-6 max-w-4xl mx-auto space-y-8">
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-4 mb-8"
-    >
-      <div className="p-3 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
-        <Icon className="w-8 h-8" />
+function PageWrapper({
+  children,
+  title,
+  subtitle,
+  icon: Icon,
+  tags,
+}: {
+  children: React.ReactNode;
+  title: string;
+  subtitle: string;
+  icon: typeof ShieldCheck;
+  tags: string[];
+}) {
+  return (
+    <PageTransition>
+      <div className="mx-auto max-w-4xl px-4 py-2 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-16">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-3xl border p-5 sm:p-7"
+          style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+            >
+              <Icon className="w-7 h-7" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[28px] font-bold tracking-tight leading-tight" style={{ color: "var(--text-primary)" }}>
+                {title}
+              </h1>
+              <p className="text-[14px] leading-6 mt-2" style={{ color: "var(--text-secondary)" }}>
+                {subtitle}
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                    style={{ background: "var(--bg-secondary)", color: "var(--text-secondary)" }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="space-y-4 mt-5">
+          {children}
+        </div>
       </div>
-      <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">{title}</h1>
-    </motion.div>
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
+    </PageTransition>
+  );
+}
+
+function SectionCard({
+  title,
+  paragraphs,
+  bullets,
+}: {
+  title: string;
+  paragraphs?: string[];
+  bullets?: string[];
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      className="prose prose-sm sm:prose-base dark:prose-invert max-w-none text-[var(--text-secondary)]"
+      className="rounded-2xl border p-5 sm:p-6"
+      style={{ background: "var(--bg-primary)", borderColor: "var(--border)", boxShadow: "var(--card-shadow)" }}
     >
-      {children}
-    </motion.div>
-  </div>
-);
+      <h2 className="text-[18px] font-semibold" style={{ color: "var(--text-primary)" }}>
+        {title}
+      </h2>
+      {paragraphs?.map((paragraph) => (
+        <p key={paragraph} className="text-[14px] leading-7 mt-3" style={{ color: "var(--text-secondary)" }}>
+          {paragraph}
+        </p>
+      ))}
+      {bullets && bullets.length > 0 && (
+        <ul className="mt-4 space-y-3">
+          {bullets.map((bullet) => (
+            <li key={bullet} className="flex items-start gap-3 text-[14px] leading-6" style={{ color: "var(--text-secondary)" }}>
+              <span
+                className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0"
+                style={{ background: "var(--accent)" }}
+              />
+              <span>{bullet}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </motion.section>
+  );
+}
 
 export const TechSpecs = () => (
-  <PageWrapper title="技术说明 (Technical Specifications)" icon={FileCode2}>
-    <div className="space-y-6">
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">1. 架构概述 (Architecture Overview)</h2>
-        <p>本系统采用现代化的前后端分离架构，旨在提供高性能、高可用且安全的学生门户体验。</p>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li><strong>前端 (Frontend):</strong> 基于 React 19 和 Vite 构建，采用 Tailwind CSS 进行响应式样式设计，结合 Motion 进行流畅的动画过渡。</li>
-          <li><strong>后端 (Backend):</strong> 采用 Node.js (Express) 作为中间层，负责与 Engage 官方系统进行安全的数据交互与会话管理。</li>
-          <li><strong>数据持久化 (Persistence):</strong> 使用 SQLite 进行本地缓存与配置管理，PostgreSQL 用于云端扩展支持。</li>
-        </ul>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">2. 安全与认证 (Security & Authentication)</h2>
-        <p>系统严格遵循最小权限原则，所有敏感数据均经过加密处理。</p>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li><strong>会话管理:</strong> 采用 HttpOnly 和 Secure 标记的加密 Cookie 进行会话维持，防范 XSS 和 CSRF 攻击。</li>
-          <li><strong>凭证加密:</strong> Microsoft OAuth 令牌使用 AES-256-GCM 算法进行高强度加密存储。</li>
-          <li><strong>数据脱敏:</strong> 传输过程全程采用 TLS 1.3 加密，确保数据在传输过程中的机密性与完整性。</li>
-        </ul>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">3. 性能优化 (Performance Optimization)</h2>
-        <p>通过多级缓存与预加载策略，显著提升页面响应速度。</p>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li><strong>静态资源:</strong> 启用 Brotli/Gzip 压缩，配合强缓存策略。</li>
-          <li><strong>API 缓存:</strong> 针对高频且非实时数据（如课表、活动）实施内存级与持久化双重缓存。</li>
-        </ul>
-      </section>
-    </div>
+  <PageWrapper
+    title="技术说明"
+    subtitle="这份说明介绍本门户的前后端结构、数据来源、缓存策略以及考试同步机制，帮助你理解系统实际是如何工作的。"
+    icon={FileCode2}
+    tags={["React 19", "Vite", "Express", "Postgres", "Microsoft Graph"]}
+  >
+    <SectionCard
+      title="1. 系统架构"
+      paragraphs={[
+        "前端使用 React 19 与 Vite 构建，负责页面渲染、动画交互、主题切换以及移动端适配。后端使用 Express 作为聚合层，统一代理 Engage 与 Microsoft Graph 请求，并把考试资料持久化到数据库。",
+        "在部署环境中，前端构建产物由静态站点输出，后端接口通过 Vercel Serverless Function 提供。这样可以让页面加载保持轻量，同时把认证逻辑和第三方访问限制在服务端。"
+      ]}
+      bullets={[
+        "课程表、活动、学生详情等内容来自学校 Engage 系统。",
+        "考试资料支持从 SharePoint 文件与临时 Mock Exam 样本中解析。",
+        "前端页面默认从数据库或缓存读取，避免每次打开页面都重复抓取原始文件。"
+      ]}
+    />
+
+    <SectionCard
+      title="2. 数据刷新与缓存"
+      paragraphs={[
+        "系统会在每日首次登录或首次读取考试资料时检查刷新状态。若是 Mock Exam 样本数据，则会在当天重新解析并写回数据库；如果已经绑定 Microsoft 账号，则可通过后端同步 SharePoint 文件。",
+        "前端也会对课表、活动与考试结果做浏览器级缓存，以减少重复请求和等待时间。缓存会依日期失效，避免旧考试数据一直留在界面上。"
+      ]}
+      bullets={[
+        "考试页面按日期分组并按开始时间排序。",
+        "主页只读取下一场考试和今日融合后的时间线，不会阻塞周课表页面。",
+        "3 月 24 日之后，Mock Exam 临时数据会自动过期并清除。"
+      ]}
+    />
+
+    <SectionCard
+      title="3. 安全与边界"
+      paragraphs={[
+        "登录学校门户时，密码仅用于向学校官方登录端点发起认证，请求成功后只保留经过签名的会话 Cookie，不会把明文密码写入数据库。",
+        "如果绑定 Microsoft，访问令牌与刷新令牌会在服务端加密后再落库。系统只请求与考试文件读取相关的最小必要权限，不会擅自访问你的其他 Microsoft 数据。"
+      ]}
+      bullets={[
+        "门户会话通过 HttpOnly Cookie 管理，前端脚本无法直接读取。",
+        "所有第三方请求都通过 HTTPS 发送。",
+        "考试解析结果仅保留页面展示所需字段，例如科目、试卷、时间、房间与监管信息。"
+      ]}
+    />
+
+    <SectionCard
+      title="4. 已知限制"
+      bullets={[
+        "学校上游页面结构或字段名称一旦变动，相关抓取逻辑可能需要跟着调整。",
+        "SharePoint 文件命名方式如果与当前识别规则差异太大，可能需要补充分类词或解析规则。",
+        "部分动画和玻璃拟态效果在低性能移动设备上会自动简化，以保证触控与滚动优先。"
+      ]}
+    />
   </PageWrapper>
 );
 
 export const LegalNotice = () => (
-  <PageWrapper title="法律声明 (Legal Notice)" icon={Scale}>
-    <div className="space-y-6">
-      <p>欢迎使用本学生门户系统。在使用本系统前，请仔细阅读以下法律声明。</p>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">1. 免责声明</h2>
-        <p>本系统作为第三方辅助工具，旨在优化学生访问学校官方 Engage 系统的体验。本系统提供的数据（包括但不限于成绩、课表、考试安排等）均抓取自官方系统。我们不对数据的绝对准确性、实时性或完整性提供任何明示或暗示的保证。如因数据延迟或错误导致的任何直接或间接损失，本系统及开发者概不负责。</p>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">2. 知识产权</h2>
-        <p>本系统的源代码、UI 设计、交互逻辑等均受版权法保护。未经授权，任何人不得擅自复制、修改、反编译或用于商业用途。学校官方系统的商标、Logo 及相关数据版权归原学校或系统供应商所有。</p>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">3. 服务变更与终止</h2>
-        <p>我们保留在不事先通知的情况下，随时修改、暂停或终止本系统部分或全部服务的权利。</p>
-      </section>
-    </div>
+  <PageWrapper
+    title="法律声明"
+    subtitle="本页面说明本程序的服务性质、责任边界与用户使用时需要理解的基本条款。"
+    icon={Scale}
+    tags={["第三方工具", "非学校官方", "仅供辅助使用"]}
+  >
+    <SectionCard
+      title="1. 服务性质"
+      paragraphs={[
+        "本程序是为提升学生访问体验而制作的第三方门户工具，并非学校官方发布的正式系统。界面优化、移动端适配、考试聚合展示等功能，属于在官方数据来源之上的二次整理与呈现。"
+      ]}
+    />
+
+    <SectionCard
+      title="2. 数据来源与准确性"
+      paragraphs={[
+        "成绩、课表、活动、考试安排等信息原则上来自学校官方 Engage 页面、SharePoint 文件或经用户授权的 Microsoft Graph 接口。虽然系统会尽量及时刷新，但仍可能受到上游延迟、文件更新滞后、字段异常或解析失败的影响。"
+      ]}
+      bullets={[
+        "请以学校官方通知、监考安排或教师说明为最终依据。",
+        "若页面显示与官方文件不一致，应优先相信学校正式渠道。",
+        "开发者不对因上游数据错误、延迟或临时不可用造成的损失承担责任。"
+      ]}
+    />
+
+    <SectionCard
+      title="3. 使用者义务"
+      bullets={[
+        "请仅使用你本人有权访问的学校账号与 Microsoft 账号。",
+        "请勿尝试绕过学校权限限制、批量抓取他人数据或将本程序用于非授权用途。",
+        "若你发现明显的安全问题、权限异常或数据泄露风险，应立即停止使用并通知维护者。"
+      ]}
+    />
+
+    <SectionCard
+      title="4. 知识产权与服务调整"
+      paragraphs={[
+        "本程序的界面实现、交互逻辑与源代码归开发者所有；学校系统的名称、Logo、原始数据和文档版权归学校或原平台方所有。开发者保留在不另行通知的情况下修改、暂停或下线部分功能的权利。"
+      ]}
+    />
   </PageWrapper>
 );
 
 export const PrivacyPolicy = () => (
-  <PageWrapper title="隐私政策 (Privacy Policy)" icon={ShieldCheck}>
-    <div className="space-y-6">
-      <p>您的隐私对我们至关重要。本隐私政策解释了我们如何收集、使用和保护您的个人信息。</p>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">1. 信息收集</h2>
-        <p>当您使用本系统时，我们需要收集以下信息以提供服务：</p>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li><strong>登录凭证:</strong> 您的 Engage 账号和密码（仅用于向官方系统发起认证请求，本系统<strong>绝不</strong>持久化存储您的密码）。</li>
-          <li><strong>基础数据:</strong> 您的姓名、学号、班级、成绩、课表等（这些数据缓存在您的本地浏览器或我们的临时缓存服务器中，以提升加载速度）。</li>
-          <li><strong>第三方授权:</strong> 如果您绑定了 Microsoft 账号，我们将存储加密后的 OAuth 令牌，用于同步日历等功能。</li>
-        </ul>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">2. 信息使用</h2>
-        <p>我们收集的信息仅用于以下目的：</p>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li>为您提供、维护和改进本系统的各项功能。</li>
-          <li>处理您的请求并提供客户支持。</li>
-          <li>在您授权的情况下，同步数据至第三方服务（如 Microsoft Calendar）。</li>
-        </ul>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">3. 信息安全</h2>
-        <p>我们采用业界标准的安全措施（如 AES-256 加密、HTTPS 传输）来保护您的个人信息，防止未经授权的访问、使用或泄露。但请注意，互联网传输无法保证 100% 的绝对安全。</p>
-      </section>
-    </div>
+  <PageWrapper
+    title="隐私政策"
+    subtitle="这份政策适用于登录页左下角可打开的隐私政策，以及应用内“关于 → 隐私政策”页面。它说明系统会处理哪些数据、为什么处理，以及你可以如何控制这些数据。"
+    icon={ShieldCheck}
+    tags={["适用于登录页", "不保存明文密码", "支持解绑 Microsoft"]}
+  >
+    <SectionCard
+      title="1. 我们会处理哪些数据"
+      bullets={[
+        "登录请求中的 Engage 账号与密码，但密码只用于即时向学校官方登录端发起认证，不会被持久化保存。",
+        "登录后学校返回的会话 Cookie，用于在后续请求中代表你读取学生详情、课表、活动和考试信息。",
+        "学生基础字段，例如姓名、学号、班级、课表、成绩与考试安排，仅在提供相关功能所需时处理。",
+        "如果你主动绑定 Microsoft，我们会存储加密后的 access token、refresh token、邮箱和最近同步状态。"
+      ]}
+    />
+
+    <SectionCard
+      title="2. 这些数据会如何被使用"
+      bullets={[
+        "用于完成登录、维持会话和向你展示门户信息。",
+        "用于解析考试文件，并在首页、考试页面、时间表页面中展示与你本人相关的考试安排。",
+        "用于在你授权的前提下访问 SharePoint 考试文件，而不会主动读取与你当前功能无关的数据。",
+        "用于故障排查、同步状态提示和最基本的缓存优化。"
+      ]}
+    />
+
+    <SectionCard
+      title="3. 数据保存位置与时长"
+      paragraphs={[
+        "浏览器端会缓存部分页面数据，例如活动、课表和考试列表，以减少重复加载。服务端会保存 Microsoft 绑定信息与解析后的考试结果，便于后续直接读取数据库而不是反复解析原始文件。",
+        "Mock Exam 临时考试资料会根据有效期自动清理；Microsoft 绑定也可以在设置页手动解绑。"
+      ]}
+      bullets={[
+        "不保存明文 Engage 密码。",
+        "考试样本数据超过有效期后会自动过期清除。",
+        "你可以通过设置页随时解除 Microsoft 绑定。"
+      ]}
+    />
+
+    <SectionCard
+      title="4. 安全措施"
+      bullets={[
+        "门户会话通过签名 Cookie 管理，避免前端脚本直接读取敏感认证内容。",
+        "Microsoft 令牌在服务端加密后再写入数据库。",
+        "所有外部请求通过 HTTPS 发送，尽量减少传输过程的风险。"
+      ]}
+    />
+
+    <SectionCard
+      title="5. 你的选择与提醒"
+      paragraphs={[
+        "如果你不同意本政策，可以停止使用本程序，或只使用不涉及 Microsoft 绑定的基础功能。继续登录并使用相关能力，表示你理解并同意本政策中描述的数据处理方式。"
+      ]}
+      bullets={[
+        "登录页左下角的“隐私政策”会进入这份同一内容。",
+        "若你发现数据异常、权限错误或想撤回授权，可在设置页解绑 Microsoft。",
+        "涉及考试安排时，请始终以学校官方通知为最终依据。"
+      ]}
+    />
   </PageWrapper>
 );
 
 export const AboutApp = () => (
-  <PageWrapper title="关于程序 (About the App)" icon={Info}>
-    <div className="space-y-6">
-      <p>本程序是一个由学生为学生打造的现代化校园门户客户端。</p>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">初衷</h2>
-        <p>传统的校园系统往往存在界面陈旧、加载缓慢、移动端适配差等问题。本程序的诞生旨在通过现代 Web 技术，重新构建一个美观、流畅、高效的学生门户，让获取校园信息变得更加愉悦。</p>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">核心特性</h2>
-        <ul className="list-disc pl-5 space-y-2 mt-2">
-          <li>✨ <strong>现代化 UI:</strong> 采用毛玻璃效果和流畅的动画，提供极佳的视觉体验。</li>
-          <li>⚡ <strong>极致性能:</strong> 优化的数据抓取和缓存策略，告别漫长的等待。</li>
-          <li>📱 <strong>全端适配:</strong> 完美支持桌面端和移动端浏览。</li>
-          <li>📅 <strong>生态整合:</strong> 支持将考试安排一键同步至 Microsoft 日历。</li>
-        </ul>
-      </section>
-      <section>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)]">版本信息</h2>
-        <p>当前版本: v1.0.0</p>
-        <p>构建时间: 2026年</p>
-      </section>
-    </div>
+  <PageWrapper
+    title="关于程序"
+    subtitle="这是一套围绕学生真实使用场景打造的校园门户重构界面，目标是在不改变数据来源的前提下，把常用信息整理得更快、更清楚、也更适合移动端。"
+    icon={Info}
+    tags={["学生门户重构", "移动端优先", "考试聚合展示"]}
+  >
+    <SectionCard
+      title="1. 项目初衷"
+      paragraphs={[
+        "原始校园门户在移动设备上往往存在页面拥挤、交互密集、加载链路长的问题。本程序希望在保留学校官方数据来源的同时，重新整理出更适合学生每天使用的首页、周时间表、考试页和设置页。",
+        "它不是为了替代学校系统，而是为了把最常被查看的内容用更清晰、更现代的方式呈现出来。"
+      ]}
+    />
+
+    <SectionCard
+      title="2. 当前提供的核心能力"
+      bullets={[
+        "主页：集中展示今日课程、近期活动与下一场考试。",
+        "考试页面：按日期分组展示考试卡片，并支持 Full Centre Supervision 信息。",
+        "设置页面：主题、强调色、动画开关与 Microsoft 绑定状态。",
+        "移动端：底部导航与展开式菜单，减少小按钮与难以命中的交互。"
+      ]}
+    />
+
+    <SectionCard
+      title="3. 设计原则"
+      bullets={[
+        "先保证信息可达，再追求动画与视觉效果。",
+        "桌面端和移动端共享同一套视觉语言，但触控尺寸、底部安全区和滚动行为单独优化。",
+        "考试、课表与活动都尽量围绕“今天要看什么、下一步要做什么”来组织。"
+      ]}
+    />
+
+    <SectionCard
+      title="4. 版本与后续方向"
+      paragraphs={[
+        "当前版本重点放在考试信息聚合、Microsoft 绑定流程、Mock Exam 回退方案以及移动端操作可用性上。后续如果学校侧权限允许，还可以继续扩展到更稳定的 SharePoint 正式同步、日历整合和更完整的“关于”公开说明页。"
+      ]}
+      bullets={[
+        "当前版本：v1.x",
+        "维护重点：稳定性、移动端点击体验、考试信息可读性",
+        "后续方向：更多公开说明、更多页面的手机端优化、正式 SharePoint 数据同步"
+      ]}
+    />
   </PageWrapper>
 );

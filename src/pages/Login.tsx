@@ -361,17 +361,28 @@ export default function Login() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.8, duration: 0.5 }}
-        className="absolute bottom-6 left-6 z-20"
+        className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-20 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 sm:bottom-6 sm:left-6 sm:w-auto sm:max-w-none sm:translate-x-0"
       >
-        <button
-          onClick={() => navigate("/privacy")}
-          className="text-[13px] font-medium transition-colors duration-200"
-          style={{ color: "var(--text-tertiary)" }}
-          onMouseEnter={(e) => e.currentTarget.style.color = "var(--accent)"}
-          onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-tertiary)"}
+        <div
+          className="glass rounded-2xl px-4 py-3 sm:px-0 sm:py-0 sm:bg-transparent sm:border-0 sm:backdrop-blur-none"
+          style={{ borderColor: "var(--border)" }}
         >
-          隐私政策
-        </button>
+          <div className="flex flex-col gap-2 sm:items-start">
+            <button
+              type="button"
+              onClick={() => navigate("/privacy")}
+              className="text-[13px] font-semibold transition-colors duration-200 touch-manipulation text-left"
+              style={{ color: "var(--text-primary)" }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "var(--accent)"}
+              onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-primary)"}
+            >
+              隐私政策
+            </button>
+            <p className="text-[11px] leading-5 sm:max-w-xs" style={{ color: "var(--text-tertiary)" }}>
+              登录即表示你已阅读本系统的隐私说明。我们不会持久化保存你的 Engage 密码，考试同步授权也可随时解绑。
+            </p>
+          </div>
+        </div>
       </motion.div>
     </div>
   );
