@@ -294,24 +294,34 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
   const mainHtml = mainResponse.data as string;
   const $main = cheerio.load(mainHtml);
   const encryptedPupilId = $main('input[id$="hdnPupilID"]').val() as string;
+  let detailsHtml = mainHtml;
 
   if (!encryptedPupilId) {
-    throw new Error("Could not find encrypted pupil ID");
+    console.warn("Student details fallback: encrypted pupil ID missing, parsing main HTML directly");
+  } else {
+    try {
+      const detailsResponse = await axios.post("https://ulinkcollege.engagehosted.cn/Services/PupilDetailsServices.asmx/RenderSimpleSection", {
+        encryptedPupilID: encryptedPupilId,
+        sectionType: "PupilDetails",
+      }, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          "Cookie": cookies,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        timeout: timeoutMs,
+      });
+
+      if (typeof detailsResponse.data?.d === "string" && detailsResponse.data.d.trim()) {
+        detailsHtml = detailsResponse.data.d;
+      } else {
+        console.warn("Student details fallback: RenderSimpleSection returned empty payload, parsing main HTML directly");
+      }
+    } catch (error: any) {
+      console.warn("Student details fallback: RenderSimpleSection failed, parsing main HTML directly:", error.message);
+    }
   }
 
-  const detailsResponse = await axios.post("https://ulinkcollege.engagehosted.cn/Services/PupilDetailsServices.asmx/RenderSimpleSection", {
-    encryptedPupilID: encryptedPupilId,
-    sectionType: "PupilDetails",
-  }, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      "Cookie": cookies,
-      "Content-Type": "application/json; charset=utf-8",
-    },
-    timeout: timeoutMs,
-  });
-
-  const detailsHtml = detailsResponse.data.d as string;
   const $ = cheerio.load(detailsHtml);
 
   const fieldMap: Record<string, string> = {
