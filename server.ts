@@ -469,6 +469,28 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
     }
   }
 
+  const normalizePupilIdCandidate = (value?: string | null) => {
+    const trimmed = value?.trim() ?? "";
+    if (!/^\d{3,5}$/.test(trimmed)) return "";
+    if (trimmed === "0") return "";
+    return trimmed;
+  };
+
+  const explicitPupilIdCandidates = [
+    $main('input[id$="performanceTracker_hdnPupilIDs"]').val() as string | undefined,
+    $main('input[name$="$performanceTracker$hdnPupilIDs"]').val() as string | undefined,
+    $main('input[id="ctl02_hdnPupilID"]').val() as string | undefined,
+    $main('input[name="ctl02$hdnPupilID"]').val() as string | undefined,
+  ];
+
+  for (const candidate of explicitPupilIdCandidates) {
+    const normalized = normalizePupilIdCandidate(candidate);
+    if (normalized) {
+      result.pupilId = normalized;
+      break;
+    }
+  }
+
   const pupilIdPatterns = [
     /pupilIDs?:\s*["'](\d+)["']/i,
     /Pupil[^=]*?=\s*["'](\d+)["']/i,
@@ -480,8 +502,9 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
   for (const pattern of pupilIdPatterns) {
     if (result.pupilId) break;
     const match = mainHtml.match(pattern);
-    if (match?.[1]) {
-      result.pupilId = match[1];
+    const normalized = normalizePupilIdCandidate(match?.[1]);
+    if (normalized) {
+      result.pupilId = normalized;
     }
   }
 
