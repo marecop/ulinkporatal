@@ -7,6 +7,7 @@ import { MapPin, User, BookOpen, FileText } from "lucide-react";
 import { useExams } from "../hooks/useExams";
 import { buildDayTimeline } from "../lib/exam";
 import { redirectToLogin } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 interface Lesson {
   day: string;
@@ -35,6 +36,7 @@ const getSubjectColor = (s: string) => {
 };
 
 export default function Schedule() {
+  const TIMETABLE_FETCH_TIMEOUT_MS = 15000;
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,13 +50,13 @@ export default function Schedule() {
       try {
         const cached = sessionStorage.getItem("timetableData");
         if (cached) { setLessons(JSON.parse(cached).lessons || []); setIsLoading(false); return; }
-        const response = await fetch("/api/timetable", { credentials: "include" });
+        const response = await fetchWithTimeout("/api/timetable", { credentials: "include" }, TIMETABLE_FETCH_TIMEOUT_MS);
         if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         sessionStorage.setItem("timetableData", JSON.stringify(data));
         setLessons(data.lessons || []);
-      } catch { setError("无法加载课程表"); }
+      } catch (error: any) { setError(error?.name === "AbortError" ? "课程表请求超时" : "无法加载课程表"); }
       finally { setIsLoading(false); }
     };
     fetchTimetable();

@@ -5,8 +5,10 @@ import { StaggerContainer, StaggerItem } from "../components/MotionCard";
 import { ListSkeleton } from "../components/Skeleton";
 import { Activity, Clock, Hash } from "lucide-react";
 import { redirectToLogin } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 export default function Activities() {
+  const ACTIVITIES_FETCH_TIMEOUT_MS = 15000;
   const [activities, setActivities] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -16,7 +18,7 @@ export default function Activities() {
       try {
         const cached = sessionStorage.getItem("activitiesData");
         if (cached) { setActivities(JSON.parse(cached)); setIsLoading(false); return; }
-        const response = await fetch("/api/activities", { credentials: "include" });
+        const response = await fetchWithTimeout("/api/activities", { credentials: "include" }, ACTIVITIES_FETCH_TIMEOUT_MS);
         if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
@@ -24,7 +26,7 @@ export default function Activities() {
         let final = Array.isArray(parsed) ? parsed : parsed?.Data || parsed?.schedules || [];
         sessionStorage.setItem("activitiesData", JSON.stringify(final));
         setActivities(final);
-      } catch { setError("无法加载活动"); }
+      } catch (error: any) { setError(error?.name === "AbortError" ? "活动请求超时" : "无法加载活动"); }
       finally { setIsLoading(false); }
     };
     fetchActivities();
