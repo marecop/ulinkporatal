@@ -186,6 +186,14 @@ function updateSession(res: express.Response, req: express.Request, patch: Parti
   writeSession(res, { ...existing, ...patch });
 }
 
+function describeUpstreamError(error: any) {
+  const message = error?.message || String(error);
+  const code = error?.code ? ` code=${error.code}` : "";
+  const status = error?.response?.status ? ` status=${error.response.status}` : "";
+  const timeout = error?.config?.timeout ? ` timeout=${error.config.timeout}ms` : "";
+  return `${message}${code}${status}${timeout}`;
+}
+
 function writeOAuthState(res: express.Response, state: string) {
   const token = `${state}.${sign(state)}`;
   appendSetCookie(
@@ -294,24 +302,34 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
   const mainHtml = mainResponse.data as string;
   const $main = cheerio.load(mainHtml);
   const encryptedPupilId = $main('input[id$="hdnPupilID"]').val() as string;
+  let detailsHtml = mainHtml;
 
   if (!encryptedPupilId) {
-    throw new Error("Could not find encrypted pupil ID");
+    console.warn("Student details fallback: encrypted pupil ID missing, parsing main HTML directly");
+  } else {
+    try {
+      const detailsResponse = await axios.post("https://ulinkcollege.engagehosted.cn/Services/PupilDetailsServices.asmx/RenderSimpleSection", {
+        encryptedPupilID: encryptedPupilId,
+        sectionType: "PupilDetails",
+      }, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          "Cookie": cookies,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        timeout: timeoutMs,
+      });
+
+      if (typeof detailsResponse.data?.d === "string" && detailsResponse.data.d.trim()) {
+        detailsHtml = detailsResponse.data.d;
+      } else {
+        console.warn("Student details fallback: RenderSimpleSection returned empty payload, parsing main HTML directly");
+      }
+    } catch (error: any) {
+      console.warn("Student details fallback: RenderSimpleSection failed, parsing main HTML directly:", error.message);
+    }
   }
 
-  const detailsResponse = await axios.post("https://ulinkcollege.engagehosted.cn/Services/PupilDetailsServices.asmx/RenderSimpleSection", {
-    encryptedPupilID: encryptedPupilId,
-    sectionType: "PupilDetails",
-  }, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      "Cookie": cookies,
-      "Content-Type": "application/json; charset=utf-8",
-    },
-    timeout: timeoutMs,
-  });
-
-  const detailsHtml = detailsResponse.data.d as string;
   const $ = cheerio.load(detailsHtml);
 
   const fieldMap: Record<string, string> = {
@@ -459,6 +477,28 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
     }
   }
 
+  const normalizePupilIdCandidate = (value?: string | null) => {
+    const trimmed = value?.trim() ?? "";
+    if (!/^\d{3,5}$/.test(trimmed)) return "";
+    if (trimmed === "0") return "";
+    return trimmed;
+  };
+
+  const explicitPupilIdCandidates = [
+    $main('input[id$="performanceTracker_hdnPupilIDs"]').val() as string | undefined,
+    $main('input[name$="$performanceTracker$hdnPupilIDs"]').val() as string | undefined,
+    $main('input[id="ctl02_hdnPupilID"]').val() as string | undefined,
+    $main('input[name="ctl02$hdnPupilID"]').val() as string | undefined,
+  ];
+
+  for (const candidate of explicitPupilIdCandidates) {
+    const normalized = normalizePupilIdCandidate(candidate);
+    if (normalized) {
+      result.pupilId = normalized;
+      break;
+    }
+  }
+
   const pupilIdPatterns = [
     /pupilIDs?:\s*["'](\d+)["']/i,
     /Pupil[^=]*?=\s*["'](\d+)["']/i,
@@ -470,8 +510,9 @@ async function fetchStudentDetailsFromPortal(cookies: string, timeoutMs = PORTAL
   for (const pattern of pupilIdPatterns) {
     if (result.pupilId) break;
     const match = mainHtml.match(pattern);
-    if (match?.[1]) {
-      result.pupilId = match[1];
+    const normalized = normalizePupilIdCandidate(match?.[1]);
+    if (normalized) {
+      result.pupilId = normalized;
     }
   }
 
@@ -755,6 +796,7 @@ async function createApp() {
 
   app.post("/api/login", async (req, res) => {
     const { username, password, localDate } = req.body;
+    const startedAt = Date.now();
 
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password are required" });
@@ -762,12 +804,14 @@ async function createApp() {
 
     try {
       const loginUrl = "https://ulinkcollege.engagehosted.cn/Login.aspx?ReturnUrl=%2f";
+      console.info("[login] start", { hasLocalDate: Boolean(localDate), usernameLength: String(username).length });
       
       // Step 1: Fetch the login page to get the hidden fields (ViewState, etc.)
       const initialResponse = await axios.get(loginUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-        }
+        },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
       });
 
       const cookies = initialResponse.headers["set-cookie"] || [];
@@ -807,6 +851,7 @@ async function createApp() {
           "Origin": "https://ulinkcollege.engagehosted.cn",
           "Referer": loginUrl
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         maxRedirects: 0, // We want to catch the 302 redirect
         validateStatus: function (status) {
           return status >= 200 && status < 400; // Resolve on 302
@@ -866,20 +911,34 @@ async function createApp() {
           }
         }
 
+        console.info("[login] success", {
+          elapsedMs: Date.now() - startedAt,
+          pupilIdResolved: Boolean(pupilId),
+          hasStudentDetails: Boolean(studentDetails),
+        });
         return res.json({ success: true, pupilIdResolved: Boolean(pupilId) });
       }
 
       // If we didn't get the expected redirect, login probably failed (e.g., wrong password)
+      console.warn("[login] unexpected status", {
+        elapsedMs: Date.now() - startedAt,
+        status: loginResponse.status,
+        location: loginResponse.headers.location || null,
+      });
       return res.status(401).json({ error: "Invalid username or password" });
 
     } catch (error: any) {
-      console.error("Login error:", error.message);
+      console.error("[login] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
       return res.status(500).json({ error: "An error occurred during login" });
     }
   });
 
   app.post("/api/logout", async (req, res) => {
     const cookies = getAuthCookies(req);
+    const startedAt = Date.now();
     
     if (cookies) {
       try {
@@ -890,21 +949,28 @@ async function createApp() {
             "Cookie": cookies,
             "Referer": "https://ulinkcollege.engagehosted.cn/vle/default.aspx"
           },
+          timeout: PORTAL_REQUEST_TIMEOUT_MS,
           maxRedirects: 0,
           validateStatus: (status) => status >= 200 && status < 400,
         });
-      } catch (e) {
+      } catch (e: any) {
+        console.warn("[logout] upstream error ignored", {
+          elapsedMs: Date.now() - startedAt,
+          details: describeUpstreamError(e),
+        });
         /* ignore upstream errors */
       }
     }
 
     clearSession(res);
     clearOAuthState(res);
+    console.info("[logout] completed", { elapsedMs: Date.now() - startedAt, hadCookies: Boolean(cookies) });
     res.json({ success: true, message: "Logged out successfully" });
   });
 
   app.get("/api/activities", async (req, res) => {
     const cookies = getAuthCookies(req);
+    const startedAt = Date.now();
     
     if (!cookies) {
       return res.status(401).json({ error: "No authentication token provided" });
@@ -912,6 +978,7 @@ async function createApp() {
 
     try {
       const activitiesUrl = "https://ulinkcollege.engagehosted.cn/Services/ActivitiesService.asmx/GetSchedulesForPupilPortal";
+      console.info("[activities] start");
       
       const activitiesResponse = await axios.post(activitiesUrl, { scheduleID: 18 }, {
         headers: {
@@ -923,6 +990,7 @@ async function createApp() {
           "Cookie": cookies,
           "X-Requested-With": "XMLHttpRequest"
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         validateStatus: function (status) {
           return status >= 200 && status < 500; // Resolve on 401 as well
         }
@@ -932,27 +1000,37 @@ async function createApp() {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      console.info("[activities] success", {
+        elapsedMs: Date.now() - startedAt,
+        status: activitiesResponse.status,
+      });
       return res.json(activitiesResponse.data);
     } catch (error: any) {
-      console.error("Activities error:", error.message);
-      return res.status(500).json({ error: "An error occurred while fetching activities" });
+      console.error("[activities] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
+      return res.status(error?.code === "ECONNABORTED" ? 504 : 500).json({ error: "An error occurred while fetching activities" });
     }
   });
 
   app.get("/api/timetable", async (req, res) => {
     const cookies = getAuthCookies(req);
+    const startedAt = Date.now();
     
     if (!cookies) {
       return res.status(401).json({ error: "No authentication token provided" });
     }
 
     try {
+      console.info("[timetable] start");
       const response = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/WeeklyTimetable.aspx", {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
           "Cookie": cookies
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         validateStatus: function (status) {
           return status >= 200 && status < 500;
         }
@@ -1047,27 +1125,37 @@ async function createApp() {
       // Sort lessons by start time
       lessons.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
+      console.info("[timetable] success", {
+        elapsedMs: Date.now() - startedAt,
+        lessons: lessons.length,
+      });
       return res.json({ lessons });
     } catch (error: any) {
-      console.error("Timetable error:", error.message);
-      return res.status(500).json({ error: "An error occurred while fetching timetable" });
+      console.error("[timetable] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
+      return res.status(error?.code === "ECONNABORTED" ? 504 : 500).json({ error: "An error occurred while fetching timetable" });
     }
   });
 
   app.get("/api/student-details", async (req, res) => {
     const cookies = getAuthCookies(req);
+    const startedAt = Date.now();
 
     if (!cookies) {
       return res.status(401).json({ error: "No authentication token provided" });
     }
 
     try {
+      console.info("[student-details] start");
       // Step 1: Fetch the main page to get the encrypted pupil ID
       const mainResponse = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
           "Cookie": cookies
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         validateStatus: function (status) {
           return status >= 200 && status < 500;
         }
@@ -1096,7 +1184,8 @@ async function createApp() {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
           "Cookie": cookies,
           "Content-Type": "application/json; charset=utf-8"
-        }
+        },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
       });
 
       const detailsHtml = detailsResponse.data.d as string;
@@ -1272,26 +1361,37 @@ async function createApp() {
         updateSession(res, req, { pupilId: result.pupilId });
       }
 
+      console.info("[student-details] success", {
+        elapsedMs: Date.now() - startedAt,
+        pupilId: result.pupilId || null,
+        hasMiddleName: Boolean(result.middleName),
+      });
       return res.json(result);
     } catch (error: any) {
-      console.error("Student details error:", error.message);
+      console.error("[student-details] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
       return res.status(500).json({ error: "An error occurred while fetching student details" });
     }
   });
 
   app.get("/api/pupil-id", async (req, res) => {
     const cookies = getAuthCookies(req);
+    const startedAt = Date.now();
     
     if (!cookies) {
       return res.status(401).json({ error: "No authentication token provided" });
     }
 
     try {
+      console.info("[pupil-id] start");
       const response = await axios.get("https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails", {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
           "Cookie": cookies
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         validateStatus: function (status) {
           return status >= 200 && status < 500;
         }
@@ -1323,12 +1423,16 @@ async function createApp() {
 
       if (pupilId) {
         updateSession(res, req, { pupilId });
+        console.info("[pupil-id] success", { elapsedMs: Date.now() - startedAt, pupilId });
         return res.json({ pupilId });
       } else {
         return res.status(404).json({ error: "Could not find pupil ID in HTML" });
       }
     } catch (error: any) {
-      console.error("Pupil ID error:", error.message);
+      console.error("[pupil-id] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
       return res.status(500).json({ error: "An error occurred while fetching pupil ID" });
     }
   });
@@ -1417,11 +1521,63 @@ async function createApp() {
     const today = resolveTemporaryFallbackToday(typeof req.query.today === "string" ? req.query.today : undefined);
     const from = typeof req.query.from === "string" ? req.query.from : undefined;
     const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    const startedAt = Date.now();
+    console.info("[exams] start", {
+      sessionHasPupilId: Boolean(session.pupilId),
+      databaseConfigured,
+      microsoftConfigured,
+      tokenEncryptionConfigured,
+      today,
+      from: from ?? null,
+      to: to ?? null,
+    });
 
     try {
       let pupilId = session.pupilId ?? "";
-      let binding = databaseConfigured && pupilId ? await getMicrosoftBinding(pupilId) : null;
+      let binding = null;
       let studentDetails: PortalStudentDetails | null = null;
+      const baseUrl = getRequestOrigin(req);
+
+      const respondWithDirectFallback = async (reason: string, bindingStatusKnown: boolean) => {
+        if (!studentDetails?.middleName) {
+          return false;
+        }
+
+        const fallback = await getTemporaryFallbackExamRecords({
+          baseUrl,
+          middleName: studentDetails.middleName,
+          today,
+        });
+
+        if (!fallback.active) {
+          return false;
+        }
+
+        console.warn("Exam DB fallback triggered:", reason);
+        return res.json({
+          configured: fullyConfigured,
+          bound: false,
+          bindingStatusKnown,
+          pupilResolved: Boolean(pupilId),
+          pupilId: pupilId || undefined,
+          email: null,
+          lastSyncAt: null,
+          lastSyncStatus: "degraded",
+          lastSyncMessage: `数据库暂时不可用，已直接读取本地 Mock Exam 文件（有效至 ${fallback.cutoffDate}）`,
+          exams: fallback.exams,
+          databaseConfigured,
+          microsoftConfigured,
+          tokenEncryptionConfigured,
+        });
+      };
+
+      if (databaseConfigured && pupilId) {
+        try {
+          binding = await getMicrosoftBinding(pupilId);
+        } catch (error: any) {
+          console.error("Exam binding lookup failed:", error.message);
+        }
+      }
 
       if (!binding) {
         studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
@@ -1431,36 +1587,44 @@ async function createApp() {
         }
 
         if (databaseConfigured && pupilId && studentDetails.middleName) {
-          await ensureTemporaryFallbackExamData({
-            baseUrl: getRequestOrigin(req),
-            pupilId,
-            middleName: studentDetails.middleName,
-            today,
-          });
+          try {
+            await ensureTemporaryFallbackExamData({
+              baseUrl,
+              pupilId,
+              middleName: studentDetails.middleName,
+              today,
+            });
 
-          const state = await getExamScheduleState(pupilId);
-          const exams = await listExamRecords(pupilId, { from, to });
+            const state = await getExamScheduleState(pupilId);
+            const exams = await listExamRecords(pupilId, { from, to });
 
-          return res.json({
-            configured: fullyConfigured,
-            bound: false,
-            bindingStatusKnown: true,
-            pupilResolved: Boolean(pupilId),
-            pupilId: pupilId || undefined,
-            email: null,
-            lastSyncAt: state?.lastRefreshAt ?? null,
-            lastSyncStatus: state?.lastRefreshStatus ?? null,
-            lastSyncMessage: state?.lastRefreshMessage ?? `当前使用本地 Mock Exam 文件（有效至 2026-03-24）`,
-            exams,
-            databaseConfigured,
-            microsoftConfigured,
-            tokenEncryptionConfigured,
-          });
+            return res.json({
+              configured: fullyConfigured,
+              bound: false,
+              bindingStatusKnown: true,
+              pupilResolved: Boolean(pupilId),
+              pupilId: pupilId || undefined,
+              email: null,
+              lastSyncAt: state?.lastRefreshAt ?? null,
+              lastSyncStatus: state?.lastRefreshStatus ?? null,
+              lastSyncMessage: state?.lastRefreshMessage ?? `当前使用本地 Mock Exam 文件（有效至 2026-03-24）`,
+              exams,
+              databaseConfigured,
+              microsoftConfigured,
+              tokenEncryptionConfigured,
+            });
+          } catch (error: any) {
+            const fallbackResponse = await respondWithDirectFallback(error.message || "exam-database-unavailable", true);
+            if (fallbackResponse) {
+              return fallbackResponse;
+            }
+            throw error;
+          }
         }
 
         if (studentDetails.middleName) {
           const fallback = await getTemporaryFallbackExamRecords({
-            baseUrl: getRequestOrigin(req),
+            baseUrl,
             middleName: studentDetails.middleName,
             today,
           });
@@ -1517,10 +1681,45 @@ async function createApp() {
       }
 
       if (!binding) {
-        binding = await getMicrosoftBinding(pupilId);
+        try {
+          binding = await getMicrosoftBinding(pupilId);
+        } catch (error: any) {
+          console.error("Exam binding reload failed:", error.message);
+          if (!studentDetails) {
+            studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
+            if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+              pupilId = studentDetails.pupilId;
+              updateSession(res, req, { pupilId });
+            }
+          }
+
+          const fallbackResponse = await respondWithDirectFallback(error.message || "exam-binding-reload-failed", false);
+          if (fallbackResponse) {
+            return fallbackResponse;
+          }
+          throw error;
+        }
       }
 
-      const exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+      let exams = [];
+      try {
+        exams = binding ? await listExamRecords(pupilId, { from, to }) : [];
+      } catch (error: any) {
+        console.error("Exam records query failed:", error.message);
+        if (!studentDetails) {
+          studentDetails = await fetchStudentDetailsFromPortal(session.authCookies);
+          if (studentDetails.pupilId && studentDetails.pupilId !== pupilId) {
+            pupilId = studentDetails.pupilId;
+            updateSession(res, req, { pupilId });
+          }
+        }
+
+        const fallbackResponse = await respondWithDirectFallback(error.message || "exam-records-query-failed", Boolean(binding));
+        if (fallbackResponse) {
+          return fallbackResponse;
+        }
+        throw error;
+      }
 
       return res.json({
         configured: fullyConfigured,
@@ -1535,6 +1734,10 @@ async function createApp() {
         exams,
       });
     } catch (error: any) {
+      console.error("[exams] error", {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
       return res.status(500).json({ error: error.message || "Failed to load exams" });
     }
   });
@@ -1542,6 +1745,7 @@ async function createApp() {
   app.post("/api/report-services/:action", async (req, res) => {
     const cookies = getAuthCookies(req);
     const { action } = req.params;
+    const startedAt = Date.now();
 
     if (!cookies) {
       return res.status(401).json({ error: "No authentication token provided" });
@@ -1560,6 +1764,7 @@ async function createApp() {
           "Referer": "https://ulinkcollege.engagehosted.cn/VLE/pupildetails.aspx?detail=PupilDetails",
           "X-Requested-With": "XMLHttpRequest"
         },
+        timeout: PORTAL_REQUEST_TIMEOUT_MS,
         validateStatus: () => true,
       });
 
@@ -1573,7 +1778,10 @@ async function createApp() {
       // Forward upstream status + body (include upstream body for debugging 500s)
       return res.status(response.status).json(response.data);
     } catch (error: any) {
-      console.error(`[${action}] exception:`, error.message);
+      console.error(`[report-services:${action}] error`, {
+        elapsedMs: Date.now() - startedAt,
+        details: describeUpstreamError(error),
+      });
       return res.status(500).json({ error: `An error occurred while fetching ${action}`, details: error.message });
     }
   });

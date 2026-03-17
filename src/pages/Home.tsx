@@ -2,12 +2,13 @@ import { PageTransition } from "../components/PageTransition";
 import { StaggerContainer, StaggerItem } from "../components/MotionCard";
 import { Calendar, Clock, MapPin, ChevronRight, User, Activity, FileText, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { ListSkeleton } from "../components/Skeleton";
 import { useExams } from "../hooks/useExams";
 import { buildTodayTimeline, formatDurationMinutes, formatExamDate, getNextUpcomingExam } from "../lib/exam";
 import { redirectToLogin } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 interface Lesson {
   day: string;
@@ -36,31 +37,17 @@ const getSubjectColor = (subject: string) => {
 };
 
 export default function Home() {
+  const HOME_FETCH_TIMEOUT_MS = 15000;
   const [activities, setActivities] = useState<any[]>([]);
   const [isLoadingActivities, setIsLoadingActivities] = useState(true);
   const [activitiesError, setActivitiesError] = useState("");
   const [todayClasses, setTodayClasses] = useState<Lesson[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [classesError, setClassesError] = useState("");
-  const { data: examsData } = useExams({ autoSync: false });
+  const { data: examsData, loading: isLoadingExams } = useExams({ autoSync: false });
+  const activitiesRequestedRef = useRef(false);
 
   useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        const cached = sessionStorage.getItem("activitiesData");
-        if (cached) { setActivities(JSON.parse(cached).slice(0, 5)); setIsLoadingActivities(false); return; }
-        const response = await fetch("/api/activities", { credentials: "include" });
-        if (response.status === 401) { redirectToLogin(); return; }
-        if (!response.ok) throw new Error("Failed");
-        const data = await response.json();
-        let parsed = data?.d ? (() => { try { return JSON.parse(data.d); } catch { return data.d; } })() : data;
-        let final = Array.isArray(parsed) ? parsed : parsed?.Data || parsed?.schedules || [];
-        sessionStorage.setItem("activitiesData", JSON.stringify(final));
-        setActivities(final.slice(0, 5));
-      } catch { setActivitiesError("无法加载活动"); }
-      finally { setIsLoadingActivities(false); }
-    };
-
     const fetchTimetable = async () => {
       try {
         const cached = sessionStorage.getItem("timetableData");
@@ -70,20 +57,48 @@ export default function Home() {
           setTodayClasses((d.lessons || []).filter((l: Lesson) => l.day === days[new Date().getDay()]));
           setIsLoadingClasses(false); return;
         }
-        const response = await fetch("/api/timetable", { credentials: "include" });
+        const response = await fetchWithTimeout("/api/timetable", { credentials: "include" }, HOME_FETCH_TIMEOUT_MS);
         if (response.status === 401) { redirectToLogin(); return; }
         if (!response.ok) throw new Error("Failed");
         const data = await response.json();
         sessionStorage.setItem("timetableData", JSON.stringify(data));
         const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         setTodayClasses((data.lessons || []).filter((l: Lesson) => l.day === days[new Date().getDay()]));
-      } catch { setClassesError("无法加载课程表"); }
+      } catch (error: any) {
+        setClassesError(error?.name === "AbortError" ? "课程表请求超时" : "无法加载课程表");
+      }
       finally { setIsLoadingClasses(false); }
     };
 
-    fetchActivities();
-    fetchTimetable();
+    void fetchTimetable();
   }, []);
+
+  useEffect(() => {
+    if (activitiesRequestedRef.current || isLoadingClasses || isLoadingExams) {
+      return;
+    }
+
+    activitiesRequestedRef.current = true;
+    const fetchActivities = async () => {
+      try {
+        const cached = sessionStorage.getItem("activitiesData");
+        if (cached) { setActivities(JSON.parse(cached).slice(0, 5)); setIsLoadingActivities(false); return; }
+        const response = await fetchWithTimeout("/api/activities", { credentials: "include" }, HOME_FETCH_TIMEOUT_MS);
+        if (response.status === 401) { redirectToLogin(); return; }
+        if (!response.ok) throw new Error("Failed");
+        const data = await response.json();
+        let parsed = data?.d ? (() => { try { return JSON.parse(data.d); } catch { return data.d; } })() : data;
+        let final = Array.isArray(parsed) ? parsed : parsed?.Data || parsed?.schedules || [];
+        sessionStorage.setItem("activitiesData", JSON.stringify(final));
+        setActivities(final.slice(0, 5));
+      } catch (error: any) {
+        setActivitiesError(error?.name === "AbortError" ? "活动请求超时" : "无法加载活动");
+      }
+      finally { setIsLoadingActivities(false); }
+    };
+
+    void fetchActivities();
+  }, [isLoadingClasses, isLoadingExams]);
 
   const todayTimeline = buildTodayTimeline(todayClasses, examsData?.exams ?? []);
   const nextUpcomingExam = getNextUpcomingExam(examsData?.exams ?? []);

@@ -10,6 +10,7 @@ import { cn } from "../lib/utils";
 import { useNavigation } from "../context/NavigationContext";
 import { CURRENT_RELEASE } from "../lib/appMeta";
 import { clearPortalClientState } from "../lib/auth";
+import { fetchWithTimeout } from "../lib/http";
 
 type NavLeafItem = {
   name: string;
@@ -180,7 +181,7 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/logout", { method: "POST", credentials: "include" });
+      await fetchWithTimeout("/api/logout", { method: "POST", credentials: "include" }, 10000);
     } catch { /* ignore */ }
     clearPortalClientState();
     navigate("/");
