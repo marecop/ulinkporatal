@@ -18,7 +18,7 @@
 思路其实不复杂：保留原始数据来源，不碰学校账号体系，然后在前端和服务端之间自己做一层整合。前端用 React + Vite 重构页面，后端用 Express 代理 Engage / Microsoft Graph 请求，再把考试数据做解析和缓存。
 
 ### 换壳怎么实现
-方法很朴素，就是在 `ulinkcollege.engagehosted.cn` 里实际点页面、抓请求、看请求头和请求体，然后把学生端真正用到的接口一条条整理出来。你会发现原网页很多功能其实都能直接复刻，只是原版前端真的写得很难看。
+方法很朴素，就是在 `ulinkcollege.engagehosted.cn` 里实际点页面、抓请求、看请求头和请求体，然后把学生端真正用到的接口一条条整理出来，然后在程序按照格式请求就行。反正登录了也就获取到cookie了。但是注意，cookie是不会被储存的。
 
 ## 现在支持的功能
 - Engage 账号登录，服务端代理学校接口并维护签名会话 Cookie
@@ -42,7 +42,7 @@
 - 解析后的结果会写入 PostgreSQL，页面优先直接读数据库，不会每次都重新扒文件
 
 ## 技术栈
-- 前端：React 19、Vite、TypeScript、motion、Tailwind CSS v4
+- 前端：React 19(现在好像是20吧)、Vite、TypeScript、motion、Tailwind CSS v4
 - 后端：Express、Axios、Cheerio
 - 数据库：PostgreSQL
 - 文件解析：`xlsx`、`pdf-parse`
